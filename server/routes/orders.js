@@ -1,6 +1,12 @@
 import express from 'express';
 import { query } from '../db.js';
 import pool from '../db.js';
+import {
+  emitOrderCancelled,
+  emitOrderCreated,
+  emitOrderUpdated,
+  emitStockChanged,
+} from '../realtime.js';
 
 const router = express.Router();
 
@@ -221,7 +227,7 @@ function parseOrderItems(items) {
 
 async function adjustProductStock(connection, productId, deltaQuantity) {
   if (!deltaQuantity) {
-    return;
+    return null;
   }
 
   const [rows] = await connection.execute(
@@ -244,6 +250,61 @@ async function adjustProductStock(connection, productId, deltaQuantity) {
     'UPDATE producto SET prod_stock = ? WHERE prod_id = ?',
     [updatedStock, productId]
   );
+
+  return {
+    productId: Number(productId),
+    previousStock: currentStock,
+    newStock: updatedStock,
+    deltaQuantity: Number(deltaQuantity),
+  };
+}
+
+function toStockAdjustmentPayload(change) {
+  return {
+    productId: Number(change.productId),
+    previousStock: Number(change.previousStock || 0),
+    newStock: Number(change.newStock || 0),
+    deltaQuantity: Number(change.deltaQuantity || 0),
+  };
+}
+
+function accumulateStockChange(changesMap, change) {
+  if (!change) {
+    return;
+  }
+
+  const normalized = toStockAdjustmentPayload(change);
+  const current = changesMap.get(normalized.productId);
+
+  if (!current) {
+    changesMap.set(normalized.productId, normalized);
+    return;
+  }
+
+  current.newStock = normalized.newStock;
+  current.deltaQuantity += normalized.deltaQuantity;
+}
+
+function buildStockEventPayload({ orderId, action, actorUserId, changes }) {
+  return {
+    orderId: Number(orderId),
+    action,
+    actorUserId: actorUserId ? Number(actorUserId) : null,
+    emittedAt: new Date().toISOString(),
+    changes: changes.map(toStockAdjustmentPayload),
+  };
+}
+
+function buildOrderEventPayload({ orderId, action, phase, total, userId, clientId = null }) {
+  return {
+    orderId: Number(orderId),
+    action,
+    phase: phase === null || typeof phase === 'undefined' ? null : Number(phase),
+    total: Number(total || 0),
+    userId: userId ? Number(userId) : null,
+    clientId: clientId ? Number(clientId) : null,
+    emittedAt: new Date().toISOString(),
+  };
 }
 
 function parseReciboValue(recibo) {
@@ -656,6 +717,7 @@ router.post('/', async (req, res) => {
   );
 
   const connection = await pool.getConnection();
+  const stockChanges = new Map();
   try {
     await connection.beginTransaction();
 
@@ -674,8 +736,17 @@ router.post('/', async (req, res) => {
       columnExistsWithConnection(connection, 'pedidos', 'ped_recibo'),
     ]);
 
+    const requestedQtyByProduct = new Map();
     for (const item of parsedItems) {
-      await adjustProductStock(connection, item.prod_id, -item.det_cantidad);
+      requestedQtyByProduct.set(
+        item.prod_id,
+        (requestedQtyByProduct.get(item.prod_id) || 0) + item.det_cantidad
+      );
+    }
+
+    for (const [productId, quantity] of requestedQtyByProduct.entries()) {
+      const change = await adjustProductStock(connection, productId, -quantity);
+      accumulateStockChange(stockChanges, change);
     }
 
     const orderColumns = ['ped_id', 'usr_id', 'cli_id', 'est_ped_id', 'ped_monto_tot', 'usr_modif'];
@@ -739,6 +810,28 @@ router.post('/', async (req, res) => {
 
     await connection.commit();
 
+    emitOrderCreated(
+      buildOrderEventPayload({
+        orderId: generatedPedidoId,
+        action: 'created',
+        phase: estadoId,
+        total: calculatedTotal,
+        userId: Number(user_id),
+        clientId: Number(cli_id),
+      })
+    );
+
+    if (stockChanges.size > 0) {
+      emitStockChanged(
+        buildStockEventPayload({
+          orderId: generatedPedidoId,
+          action: 'created',
+          actorUserId: Number(usr_modif || user_id),
+          changes: Array.from(stockChanges.values()),
+        })
+      );
+    }
+
     res.status(201).json({
       id: generatedPedidoId,
       user_id: Number(user_id),
@@ -794,6 +887,7 @@ router.put('/:id', async (req, res) => {
   }
 
   const connection = await pool.getConnection();
+  const stockChanges = new Map();
   try {
     await connection.beginTransaction();
 
@@ -839,7 +933,8 @@ router.put('/:id', async (req, res) => {
         const currentQty = currentQtyByProduct.get(productId) || 0;
         const nextQty = nextQtyByProduct.get(productId) || 0;
         const stockDelta = currentQty - nextQty;
-        await adjustProductStock(connection, productId, stockDelta);
+        const change = await adjustProductStock(connection, productId, stockDelta);
+        accumulateStockChange(stockChanges, change);
       }
 
       await connection.execute('DELETE FROM pedido_detalle WHERE ped_id = ?', [orderId]);
@@ -1015,6 +1110,29 @@ router.put('/:id', async (req, res) => {
     );
 
     await connection.commit();
+
+    emitOrderUpdated(
+      buildOrderEventPayload({
+        orderId,
+        action: 'updated',
+        phase: resolvedPhaseId,
+        total: nextOrderTotal,
+        userId: Number(usr_modif || currentOrder.usr_id || 0) || null,
+        clientId: null,
+      })
+    );
+
+    if (stockChanges.size > 0) {
+      emitStockChanged(
+        buildStockEventPayload({
+          orderId,
+          action: 'updated',
+          actorUserId: Number(usr_modif || currentOrder.usr_id || 0) || null,
+          changes: Array.from(stockChanges.values()),
+        })
+      );
+    }
+
     res.json({ message: 'Orden actualizada' });
   } catch (error) {
     try {
@@ -1037,6 +1155,7 @@ router.put('/:id/cancel', async (req, res) => {
   }
 
   const connection = await pool.getConnection();
+  const stockChanges = new Map();
   try {
     await connection.beginTransaction();
 
@@ -1073,8 +1192,15 @@ router.put('/:id/cancel', async (req, res) => {
       [orderId]
     );
 
+    const restoredQtyByProduct = new Map();
     for (const row of detailRows) {
-      await adjustProductStock(connection, Number(row.prod_id), Number(row.det_cantidad || 0));
+      const productId = Number(row.prod_id);
+      restoredQtyByProduct.set(productId, (restoredQtyByProduct.get(productId) || 0) + Number(row.det_cantidad || 0));
+    }
+
+    for (const [productId, quantity] of restoredQtyByProduct.entries()) {
+      const change = await adjustProductStock(connection, productId, quantity);
+      accumulateStockChange(stockChanges, change);
     }
 
     const modifierId = modifierUserId > 0 ? modifierUserId : Number(currentOrder.usr_id || 0) || null;
@@ -1093,6 +1219,29 @@ router.put('/:id/cancel', async (req, res) => {
     });
 
     await connection.commit();
+
+    emitOrderCancelled(
+      buildOrderEventPayload({
+        orderId,
+        action: 'cancelled',
+        phase: cancelledEstadoId,
+        total: 0,
+        userId: modifierId,
+        clientId: null,
+      })
+    );
+
+    if (stockChanges.size > 0) {
+      emitStockChanged(
+        buildStockEventPayload({
+          orderId,
+          action: 'cancelled',
+          actorUserId: modifierId,
+          changes: Array.from(stockChanges.values()),
+        })
+      );
+    }
+
     res.json({ message: 'Pedido cancelado y stock restaurado', phase: cancelledEstadoId, status: 'cancelado' });
   } catch (error) {
     try {

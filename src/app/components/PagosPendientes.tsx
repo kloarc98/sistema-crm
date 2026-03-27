@@ -157,14 +157,6 @@ export function PagosPendientes() {
   }, []);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      loadRows();
-    }, 30000);
-
-    return () => window.clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
     const handleOrdersChanged = () => {
       loadRows();
     };

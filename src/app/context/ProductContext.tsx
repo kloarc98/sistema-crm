@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import { io, type Socket } from "socket.io-client";
 
 export interface Product {
   id: string;
@@ -28,13 +29,53 @@ interface ProductContextType {
   refreshProducts: (statusFilter?: ProductStatusFilter) => Promise<void>;
 }
 
+interface StockChangedEntry {
+  productId: number;
+  previousStock: number;
+  newStock: number;
+  deltaQuantity: number;
+}
+
+interface StockChangedPayload {
+  orderId: number;
+  action: string;
+  actorUserId: number | null;
+  emittedAt: string;
+  changes: StockChangedEntry[];
+}
+
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
+
+const notifyWindow = (eventName: string, detail?: unknown) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(eventName, { detail }));
+};
+
+const getRealtimeServerUrl = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const { hostname, port, origin } = window.location;
+  const isLocalFrontend = hostname === "localhost" || hostname === "127.0.0.1";
+
+  if (isLocalFrontend && port !== "3001") {
+    return "http://localhost:3001";
+  }
+
+  return origin;
+};
 
 export function ProductProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [currentStatusFilter, setCurrentStatusFilter] = useState<ProductStatusFilter>("activos");
+  const refreshProductsRef = useRef<((statusFilter?: ProductStatusFilter) => Promise<void>) | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   const API_BASE = "";
 
@@ -113,7 +154,79 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    refreshProductsRef.current = refreshProducts;
+  }, [refreshProducts]);
+
+  useEffect(() => {
     refreshProducts("activos");
+  }, []);
+
+  useEffect(() => {
+    const realtimeUrl = getRealtimeServerUrl();
+    if (!realtimeUrl) {
+      return;
+    }
+
+    const socket = io(realtimeUrl, {
+      transports: ["websocket", "polling"],
+    });
+
+    socketRef.current = socket;
+
+    const handleStockChanged = (payload: StockChangedPayload) => {
+      const changes = Array.isArray(payload?.changes) ? payload.changes : [];
+      if (changes.length === 0) {
+        return;
+      }
+
+      setProducts((prev) => {
+        let changed = false;
+
+        const next = prev.map((product) => {
+          const match = changes.find((entry) => String(entry.productId) === String(product.id));
+          if (!match) {
+            return product;
+          }
+
+          const nextStock = Number(match.newStock || 0);
+          if (product.stock === nextStock) {
+            return product;
+          }
+
+          changed = true;
+          return { ...product, stock: nextStock };
+        });
+
+        return changed ? next : prev;
+      });
+
+      notifyWindow("products:changed", payload);
+    };
+
+    const handleOrderEvent = (payload: unknown) => {
+      notifyWindow("orders:changed", payload);
+    };
+
+    const handleReconnect = () => {
+      void refreshProductsRef.current?.();
+      notifyWindow("orders:changed", { source: "socket:reconnect" });
+    };
+
+    socket.on("stock:changed", handleStockChanged);
+    socket.on("order:created", handleOrderEvent);
+    socket.on("order:updated", handleOrderEvent);
+    socket.on("order:cancelled", handleOrderEvent);
+    socket.on("connect", handleReconnect);
+
+    return () => {
+      socket.off("stock:changed", handleStockChanged);
+      socket.off("order:created", handleOrderEvent);
+      socket.off("order:updated", handleOrderEvent);
+      socket.off("order:cancelled", handleOrderEvent);
+      socket.off("connect", handleReconnect);
+      socket.disconnect();
+      socketRef.current = null;
+    };
   }, []);
 
   const addProduct = async (product: Omit<Product, "id">): Promise<Product | null> => {

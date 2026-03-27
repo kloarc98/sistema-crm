@@ -198,17 +198,6 @@ function RootContent() {
   }, [user?.id, isVendedor, reminderDays, lowStockThreshold]);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      loadOverdueOrders();
-      loadLowStockProducts();
-    }, 30000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [user?.id, isVendedor, reminderDays, lowStockThreshold]);
-
-  useEffect(() => {
     const handleOrdersChanged = () => {
       loadOverdueOrders();
     };

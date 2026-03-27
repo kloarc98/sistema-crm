@@ -153,16 +153,6 @@ export function Orders() {
   }, []);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      loadOrders();
-    }, 30000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
-  useEffect(() => {
     const handleOrdersChanged = () => {
       loadOrders();
     };

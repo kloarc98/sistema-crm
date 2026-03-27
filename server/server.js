@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import http from 'http';
 import {
   ensureLoginHistoryTable,
   ensureOrderActionsHistoryTable,
@@ -15,11 +16,15 @@ import productsRoutes from './routes/products.js';
 import ordersRoutes from './routes/orders.js';
 import clientsRoutes from './routes/clients.js';
 import shippingProvidersRoutes from './routes/shippingProviders.js';
+import { attachRealtime } from './realtime.js';
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
+
+attachRealtime(server);
 
 // Middleware
 app.use(cors());
@@ -131,6 +136,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
 });

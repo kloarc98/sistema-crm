@@ -113,6 +113,11 @@ export function Income() {
     window.dispatchEvent(new CustomEvent("orders:changed"));
   };
 
+  const productStockById = useMemo(
+    () => new Map(products.map((product) => [String(product.id), Number(product.stock ?? 0)])),
+    [products]
+  );
+
   const mapOrderRowToSale = (row: any): CompletedSale => {
     const createdAt = row?.created_at ? String(row.created_at) : "";
     const parsedDate = createdAt ? new Date(createdAt) : null;
@@ -184,19 +189,45 @@ export function Income() {
   };
 
   const getProductStock = (productId: string) => {
-    const product = products.find((p) => String(p.id) === String(productId));
-    return Number(product?.stock ?? 0);
+    return Number(productStockById.get(String(productId)) ?? 0);
   };
 
-  const validateCartStock = () => {
-    for (const item of cart) {
+  const validateItemsStock = (items: CartItem[], contextLabel: string) => {
+    for (const item of items) {
       const availableStock = getProductStock(item.productId);
       if (item.quantity > availableStock) {
-        addAlert(`Stock insuficiente para ${item.name}. Disponible: ${availableStock}`, "error");
+        addAlert(`Stock insuficiente para ${item.name}${contextLabel}. Disponible: ${availableStock}`, "error");
         return false;
       }
     }
+
     return true;
+  };
+
+  const reconcileItemsWithStock = (items: CartItem[]) => {
+    const adjustments: string[] = [];
+
+    const nextItems = items.flatMap((item) => {
+      const availableStock = getProductStock(item.productId);
+
+      if (availableStock <= 0) {
+        adjustments.push(`${item.name} quedó sin stock`);
+        return [];
+      }
+
+      if (item.quantity > availableStock) {
+        adjustments.push(`${item.name} se ajustó a ${availableStock}`);
+        return [{ ...item, quantity: availableStock }];
+      }
+
+      return [item];
+    });
+
+    return { nextItems, adjustments };
+  };
+
+  const validateCartStock = () => {
+    return validateItemsStock(cart, "");
   };
 
   const handleSelectProduct = (product: any) => {
@@ -332,14 +363,25 @@ export function Income() {
   };
 
   const handleAddItemToEditingSale = (product: any) => {
+    const availableStock = getProductStock(String(product.id));
+    if (availableStock <= 0) {
+      addAlert(`El producto ${product.name} no tiene stock disponible`, "warning");
+      return;
+    }
+
     const existingItem = editingSaleItems.find(
-      (item) => item.productId === product.id
+      (item) => String(item.productId) === String(product.id)
     );
 
     if (existingItem) {
+      if (existingItem.quantity + 1 > availableStock) {
+        addAlert(`No puedes agregar más de ${availableStock} unidades de ${product.name}`, "warning");
+        return;
+      }
+
       setEditingSaleItems(
         editingSaleItems.map((item) =>
-          item.productId === product.id
+          String(item.productId) === String(product.id)
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
@@ -369,6 +411,14 @@ export function Income() {
       handleRemoveItemFromEditingSale(productId);
       return;
     }
+
+    const availableStock = getProductStock(productId);
+    if (newQuantity > availableStock) {
+      const itemName = editingSaleItems.find((item) => item.productId === productId)?.name || "este producto";
+      addAlert(`Stock insuficiente para ${itemName}. Disponible: ${availableStock}`, "error");
+      return;
+    }
+
     setEditingSaleItems(
       editingSaleItems.map((item) =>
         item.productId === productId
@@ -384,6 +434,10 @@ export function Income() {
 
   const handleConfirmSave = async () => {
     if (!editingSaleId || editingSaleItems.length === 0) {
+      return;
+    }
+
+    if (!validateItemsStock(editingSaleItems, " en la edición")) {
       return;
     }
 
@@ -671,14 +725,32 @@ export function Income() {
   }, [products, searchInput]);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      loadSalesFromDb();
-    }, 30000);
+    if (cart.length === 0) {
+      return;
+    }
 
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [user?.id, user?.role]);
+    const { nextItems, adjustments } = reconcileItemsWithStock(cart);
+    if (adjustments.length === 0) {
+      return;
+    }
+
+    setCart(nextItems);
+    addAlert(`Stock actualizado: ${adjustments.join("; ")}`, "warning");
+  }, [products]);
+
+  useEffect(() => {
+    if (!isEditDialogOpen || editingSaleItems.length === 0) {
+      return;
+    }
+
+    const { nextItems, adjustments } = reconcileItemsWithStock(editingSaleItems);
+    if (adjustments.length === 0) {
+      return;
+    }
+
+    setEditingSaleItems(nextItems);
+    addAlert(`Se ajustó la edición del pedido: ${adjustments.join("; ")}`, "warning");
+  }, [products, isEditDialogOpen]);
 
   useEffect(() => {
     const handleOrdersChanged = () => {
