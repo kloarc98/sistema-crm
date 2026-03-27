@@ -1,0 +1,1077 @@
+import { useEffect, useState } from "react";
+import { Plus, Package, Trash2, Search, Pencil, Filter, RotateCcw } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
+import { useTheme } from "../context/ThemeContext";
+import { useAlert } from "../context/AlertContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "./ui/dialog";
+import { useProducts, type ProductStatusFilter } from "../context/ProductContext";
+import { formatCurrency, formatNumber } from "../utils/numberFormat";
+import {
+  DEFAULT_LOW_STOCK_THRESHOLD,
+  fetchGlobalLowStockThreshold,
+  loadLowStockThreshold,
+  LOW_STOCK_THRESHOLD_CHANGED_EVENT,
+} from "../utils/paymentReminderSettings";
+
+interface ProductMovement {
+  id: number;
+  user_id: number | null;
+  user_name: string;
+  type: string;
+  description: string;
+  previous_stock: number | null;
+  new_stock: number | null;
+  previous_price: number | null;
+  new_price: number | null;
+  created_at: string | null;
+}
+
+export function Products() {
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, setProductStatus, refreshProducts } = useProducts();
+  const { darkMode } = useTheme();
+  const { addAlert } = useAlert();
+
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [purchasePrice, setPurchasePrice] = useState("");
+  const [stock, setStock] = useState("");
+  const [category, setCategory] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [observations, setObservations] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("none");
+  const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>("activos");
+  const [lowStockThreshold, setLowStockThreshold] = useState<number>(() => loadLowStockThreshold());
+
+  // Edit dialog state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<{
+    id: string;
+    name: string;
+    price: string;
+    purchasePrice?: string;
+    stock: string;
+    category: string;
+    barcode: string;
+    observations: string;
+  } | null>(null);
+
+  // Delete confirmation dialog state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<string | null>(null);
+
+  // Product details dialog state
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [selectedProductForDetails, setSelectedProductForDetails] = useState<any>(null);
+  const [productMovements, setProductMovements] = useState<ProductMovement[]>([]);
+  const [isLoadingMovements, setIsLoadingMovements] = useState(false);
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return "—";
+    const parsed = new Date(iso);
+    if (Number.isNaN(parsed.getTime())) return String(iso);
+    return parsed.toLocaleString();
+  };
+
+  const getMovementTypeLabel = (type: string) => {
+    const normalized = String(type || "").toLowerCase();
+    if (normalized === "creacion") return "Creación";
+    if (normalized === "actualizacion") return "Actualización";
+    if (normalized === "ajuste_stock") return "Ajuste de Stock";
+    if (normalized === "inhabilitacion") return "Inhabilitación";
+    if (normalized === "reactivacion") return "Reactivación";
+    return type || "Movimiento";
+  };
+
+  const openDetailsWithMovements = async (product: any) => {
+    setSelectedProductForDetails(product);
+    setIsDetailsDialogOpen(true);
+    setIsLoadingMovements(true);
+    setProductMovements([]);
+
+    try {
+      const response = await fetch(`/api/products/${product.id}/movements`);
+      if (!response.ok) {
+        throw new Error("No se pudo cargar el historial de movimientos");
+      }
+
+      const payload = await response.json();
+      const parsedMovements: ProductMovement[] = Array.isArray(payload)
+        ? payload.map((row: any) => ({
+            id: Number(row?.id ?? 0),
+            user_id: row?.user_id === null || typeof row?.user_id === "undefined" ? null : Number(row.user_id),
+            user_name: String(row?.user_name || ""),
+            type: String(row?.type || ""),
+            description: String(row?.description || ""),
+            previous_stock:
+              row?.previous_stock === null || typeof row?.previous_stock === "undefined"
+                ? null
+                : Number(row.previous_stock),
+            new_stock:
+              row?.new_stock === null || typeof row?.new_stock === "undefined"
+                ? null
+                : Number(row.new_stock),
+            previous_price:
+              row?.previous_price === null || typeof row?.previous_price === "undefined"
+                ? null
+                : Number(row.previous_price),
+            new_price:
+              row?.new_price === null || typeof row?.new_price === "undefined"
+                ? null
+                : Number(row.new_price),
+            created_at: row?.created_at ?? null,
+          }))
+        : [];
+
+      parsedMovements.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (dateB !== dateA) {
+          return dateB - dateA;
+        }
+        return Number(b.id || 0) - Number(a.id || 0);
+      });
+
+      setProductMovements(parsedMovements);
+    } catch (err) {
+      setProductMovements([]);
+      addAlert(err instanceof Error ? err.message : "No se pudo cargar el historial de movimientos", "error");
+    } finally {
+      setIsLoadingMovements(false);
+    }
+  };
+
+  const handleProductSelect = (productId: string) => {
+    if (productId === "new") {
+      setSelectedProductId("new");
+      setName("");
+      setPrice("");
+      setStock("");
+      setCategory("");
+      setBarcode("");
+      setObservations("");
+    } else {
+      setSelectedProductId(productId);
+      const product = products.find((p) => p.id === productId);
+      if (product) {
+        setName(product.name);
+        setPrice(product.price.toString());
+        setPurchasePrice((product.purchasePrice || 0).toString());
+        setCategory(product.category);
+        setBarcode(product.barcode || "");
+        setObservations((product as any).observations || "");
+      }
+      setStock("");
+    }
+  };
+
+  const handleAddProduct = async () => {
+    if (isSubmittingProduct) {
+      return;
+    }
+
+    if (!name || !stock || !category) {
+      addAlert("Nombre, stock y categoría son requeridos", "error");
+      return;
+    }
+
+    setIsSubmittingProduct(true);
+
+    try {
+
+      if (selectedProductId && selectedProductId !== "new") {
+        // Update existing product - add to stock
+        const existingProduct = products.find((p) => p.id === selectedProductId);
+        if (existingProduct) {
+          await updateProduct(selectedProductId, {
+            stock: existingProduct.stock + parseInt(stock),
+            price: price ? parseFloat(price) : existingProduct.price,
+            purchasePrice: purchasePrice ? parseFloat(purchasePrice) : existingProduct.purchasePrice,
+            barcode: barcode || existingProduct.barcode,
+            observations: observations || (existingProduct as any).observations,
+          });
+          addAlert("✓ Producto actualizado correctamente", "success");
+        }
+      } else {
+        // Add new product
+        if (!price || !purchasePrice) {
+          addAlert("Precio y precio de compra son requeridos para crear producto", "error");
+          return;
+        }
+        const created = await addProduct({
+          name,
+          price: parseFloat(price),
+          purchasePrice: parseFloat(purchasePrice),
+          stock: parseInt(stock),
+          category,
+          barcode: barcode || undefined,
+          observations: observations || undefined,
+        });
+        if (!created) {
+          addAlert("No se pudo crear el producto", "error");
+          return;
+        }
+        addAlert("✓ Producto creado correctamente", "success");
+      }
+
+      setSelectedProductId("");
+      setName("");
+      setPrice("");
+      setPurchasePrice("");
+      setStock("");
+      setCategory("");
+      setBarcode("");
+      setObservations("");
+    } catch (err) {
+      addAlert(err instanceof Error ? err.message : "No se pudo guardar el producto", "error");
+    } finally {
+      setIsSubmittingProduct(false);
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    setProductToDelete(id);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleReactivate = async (id: string) => {
+    await setProductStatus(id, "activo");
+    addAlert("✓ Producto reactivado correctamente", "success");
+  };
+
+  const handleStatusFilterChange = async (value: string) => {
+    const nextFilter = value as ProductStatusFilter;
+    setStatusFilter(nextFilter);
+    await refreshProducts(nextFilter);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (productToDelete) {
+      await deleteProduct(productToDelete);
+      setIsDeleteDialogOpen(false);
+      setProductToDelete(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    addAlert("✓ Producto eliminado correctamente", "success");
+    setIsDeleteDialogOpen(false);
+    setProductToDelete(null);
+  };
+
+  const handleEditClick = (product: any) => {
+    setEditingProduct({
+      id: product.id,
+      name: product.name,
+      price: product.price.toString(),
+      purchasePrice: (product.purchasePrice || 0).toString(),
+      stock: product.stock.toString(),
+      category: product.category,
+      barcode: product.barcode || "",
+      observations: product.observations || "",
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editingProduct) {
+      addAlert("No hay producto seleccionado para editar", "error");
+      return;
+    }
+
+    if (!editingProduct.name || !editingProduct.price || !editingProduct.stock || !editingProduct.category) {
+      addAlert("Nombre, precio, stock y categoría son requeridos", "error");
+      return;
+    }
+    
+    await updateProduct(editingProduct.id, {
+      name: editingProduct.name.toUpperCase(),
+      price: parseFloat(editingProduct.price),
+      purchasePrice: editingProduct.purchasePrice ? parseFloat(editingProduct.purchasePrice) : undefined,
+      stock: parseInt(editingProduct.stock),
+      category: editingProduct.category.toUpperCase(),
+      barcode: editingProduct.barcode ? editingProduct.barcode.toUpperCase() : undefined,
+      observations: editingProduct.observations ? editingProduct.observations.toUpperCase() : undefined,
+    });
+
+    addAlert("✓ Producto editado correctamente", "success");
+    setIsEditDialogOpen(false);
+    setEditingProduct(null);
+  };
+
+  const handleEditCancel = () => {
+    setIsEditDialogOpen(false);
+    setEditingProduct(null);
+  };
+
+  const filteredProducts = products.filter(
+    (product) =>
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Apply sorting
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    switch (sortBy) {
+      case "stock-high":
+        return b.stock - a.stock;
+      case "stock-low":
+        return a.stock - b.stock;
+      case "price-high":
+        return b.price - a.price;
+      case "price-low":
+        return a.price - b.price;
+      case "name-asc":
+        return a.name.localeCompare(b.name);
+      case "name-desc":
+        return b.name.localeCompare(a.name);
+      default:
+        return 0;
+    }
+  });
+
+  const [productsPage, setProductsPage] = useState(1);
+  const productsTotalPages = Math.max(1, Math.ceil(sortedProducts.length / 10));
+  const paginatedProducts = sortedProducts.slice((productsPage - 1) * 10, productsPage * 10);
+
+  const totalProducts = products.length;
+  const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0);
+  const lowStockCount = products.filter((p) => p.stock > 0 && p.stock <= lowStockThreshold).length;
+
+  // Calculate transaction total
+  const transactionTotal = price && stock 
+    ? parseFloat(price) * parseInt(stock || "0")
+    : 0;
+
+  const isExistingProduct = selectedProductId && selectedProductId !== "new";
+
+  useEffect(() => { setProductsPage(1); }, [searchQuery, sortBy, statusFilter]);
+
+  useEffect(() => {
+    refreshProducts(statusFilter);
+  }, []);
+
+  useEffect(() => {
+    const handleOrdersChanged = () => {
+      refreshProducts(statusFilter);
+    };
+
+    window.addEventListener("orders:changed", handleOrdersChanged);
+    return () => {
+      window.removeEventListener("orders:changed", handleOrdersChanged);
+    };
+  }, [statusFilter, refreshProducts]);
+
+  useEffect(() => {
+    const syncGlobalLowStockThreshold = async () => {
+      const threshold = await fetchGlobalLowStockThreshold();
+      setLowStockThreshold(threshold || DEFAULT_LOW_STOCK_THRESHOLD);
+    };
+
+    syncGlobalLowStockThreshold();
+  }, []);
+
+  useEffect(() => {
+    const handleLowStockThresholdChanged = () => {
+      setLowStockThreshold(loadLowStockThreshold());
+    };
+
+    window.addEventListener(LOW_STOCK_THRESHOLD_CHANGED_EVENT, handleLowStockThresholdChanged as EventListener);
+    return () => {
+      window.removeEventListener(LOW_STOCK_THRESHOLD_CHANGED_EVENT, handleLowStockThresholdChanged as EventListener);
+    };
+  }, []);
+
+  return (
+    <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <div className="mb-8 sm:mb-10">
+        <h1 className={`text-3xl sm:text-4xl font-bold mb-2 ${darkMode ? 'text-white' : ''}`}>Productos</h1>
+        <p className={`text-sm sm:text-base ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Gestiona tu inventario y productos</p>
+        {isLoading && (
+          <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Cargando productos desde la base de datos...
+          </p>
+        )}
+        {!!error && (
+          <p className="mt-2 text-sm text-red-600">{error}</p>
+        )}
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
+        <Card className={darkMode ? 'bg-gray-800 border-gray-700' : ''}>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total de Productos</p>
+                <p className={`text-2xl font-bold ${darkMode ? 'text-white' : ''}`}>{formatNumber(totalProducts)}</p>
+              </div>
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <Package className="size-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={darkMode ? 'bg-gray-800 border-gray-700' : ''}>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Valor de Inventario</p>
+                <p className={`text-2xl font-bold ${darkMode ? 'text-white' : ''}`}>{formatCurrency(totalValue)}</p>
+              </div>
+              <div className="bg-green-50 p-3 rounded-lg">
+                <Package className="size-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={darkMode ? 'bg-gray-800 border-gray-700' : ''}>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Productos con Bajo Stock (Min: {formatNumber(lowStockThreshold)})
+                </p>
+                <p className="text-2xl font-bold text-orange-600">{formatNumber(lowStockCount)}</p>
+              </div>
+              <div className="bg-orange-50 p-3 rounded-lg">
+                <Package className="size-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Add Product Form */}
+        <Card className={`lg:col-span-1 ${darkMode ? 'bg-gray-800 border-gray-700' : ''}`}>
+          <CardHeader>
+            <CardTitle className={darkMode ? 'text-white' : ''}>Agregar Producto</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="product-select" className={darkMode ? 'text-gray-200' : ''}>Seleccionar Producto</Label>
+                <Select value={selectedProductId} onValueChange={handleProductSelect}>
+                  <SelectTrigger className={darkMode ? 'bg-gray-700 border-gray-600' : ''}>
+                    <SelectValue placeholder="Nuevo producto o seleccionar existente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">+ Nuevo Producto</SelectItem>
+                    {products.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="product-name" className={darkMode ? 'text-gray-200' : ''}>Nombre del Producto</Label>
+                <Input
+                  id="product-name"
+                  placeholder="Ingresa el nombre del producto"
+                  value={name}
+                  onChange={(e) => setName(e.target.value.toUpperCase())}
+                  disabled={!!isExistingProduct}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="price" className={darkMode ? 'text-gray-200' : ''}>Precio de Venta (Q)</Label>
+                <Input
+                  id="price"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  disabled={!!isExistingProduct}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="purchase-price" className={darkMode ? 'text-gray-200' : ''}>Costo (Q)</Label>
+                <Input
+                  id="purchase-price"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={purchasePrice}
+                  onChange={(e) => setPurchasePrice(e.target.value)}
+                  disabled={!!isExistingProduct}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="stock" className={darkMode ? 'text-gray-200' : ''}>Cantidad de Stock</Label>
+                <Input
+                  id="stock"
+                  type="number"
+                  placeholder="0"
+                  value={stock}
+                  onChange={(e) => setStock(e.target.value)}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+                {isExistingProduct && stock && (
+                  <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Se añadirán {stock} unidades al stock existente
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="product-category" className={darkMode ? 'text-gray-200' : ''}>Categoría</Label>
+                <Input
+                  id="product-category"
+                  placeholder="Ej: Electrónica, Accesorios"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value.toUpperCase())}
+                  disabled={!!isExistingProduct}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+                {/* Category suggestions */}
+                {!isExistingProduct && category.trim() !== "" && (
+                  <div className={`mt-2 border rounded-lg max-h-36 overflow-y-auto ${darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'}`}>
+                    {(Array.from(new Set(products.map(p => p.category)))
+                      .filter(c => c.toLowerCase().includes(category.toLowerCase()))
+                      .slice(0, 8)).map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setCategory(c)}
+                          className={`w-full text-left p-2 hover:bg-blue-500 hover:text-white transition-colors text-sm ${darkMode ? 'border-gray-600' : 'border-gray-200'} border-b last:border-b-0`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="product-barcode" className={darkMode ? 'text-gray-200' : ''}>Código de Barras (Opcional)</Label>
+                <Input
+                  id="product-barcode"
+                  placeholder="Ingresa código de barras"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value.toUpperCase())}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="product-observations" className={darkMode ? 'text-gray-200' : ''}>Observaciones (Opcional)</Label>
+                <Textarea
+                  id="product-observations"
+                  placeholder="Ingresa notas u observaciones sobre el producto"
+                  value={observations}
+                  onChange={(e) => setObservations(e.target.value.toUpperCase())}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                  rows={3}
+                />
+              </div>
+
+              {transactionTotal > 0 && (
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-blue-50'}`}>
+                  <p className={`text-sm mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total de la Transacción</p>
+                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(transactionTotal)}</p>
+                </div>
+              )}
+
+              <Button onClick={handleAddProduct} disabled={isSubmittingProduct} className="w-full">
+                <Plus className="size-4 mr-2" />
+                {isSubmittingProduct ? "Procesando..." : isExistingProduct ? "Añadir Stock" : "Agregar Producto"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Products List */}
+        <Card className={`lg:col-span-2 ${darkMode ? 'bg-gray-800 border-gray-700' : ''}`}>
+          <CardHeader>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className={darkMode ? 'text-white' : ''}>Lista de Productos</CardTitle>
+                <div className="relative w-full sm:w-64 max-w-full">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar productos..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`pl-10 ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}`}
+                  />
+                </div>
+              </div>
+              
+              {/* Filter/Sort Options */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Filter className={`size-4 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
+                <Label className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Estado:</Label>
+                <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+                  <SelectTrigger className={`w-full sm:w-[180px] ${darkMode ? 'bg-gray-700 border-gray-600' : ''}`}>
+                    <SelectValue placeholder="Filtrar por estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="activos">Activos</SelectItem>
+                    <SelectItem value="inhabilitados">Inhabilitados</SelectItem>
+                    <SelectItem value="todos">Todos</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Label className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Ordenar por:</Label>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className={`w-full sm:w-[200px] ${darkMode ? 'bg-gray-700 border-gray-600' : ''}`}>
+                    <SelectValue placeholder="Sin ordenar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin ordenar</SelectItem>
+                    <SelectItem value="name-asc">Nombre (A-Z)</SelectItem>
+                    <SelectItem value="name-desc">Nombre (Z-A)</SelectItem>
+                    <SelectItem value="price-high">Precio (Mayor a Menor)</SelectItem>
+                    <SelectItem value="price-low">Precio (Menor a Mayor)</SelectItem>
+                    <SelectItem value="stock-high">Stock (Mayor a Menor)</SelectItem>
+                    <SelectItem value="stock-low">Stock (Menor a Mayor)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {sortedProducts.length === 0 ? (
+                <div className={`text-center py-8 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {searchQuery ? "No se encontraron productos" : "No hay productos agregados"}
+                </div>
+              ) : (
+                <>
+                {paginatedProducts.map((product) => (
+                  (() => {
+                    const isInactive =
+                      (product.status || "").toLowerCase().includes("inhabilitado") ||
+                      (product.status || "").toLowerCase().includes("inactivo");
+
+                    return (
+                  <div
+                    key={product.id}
+                    className={`flex flex-col gap-3 p-4 rounded-lg transition-colors sm:flex-row sm:items-center sm:justify-between ${
+                      darkMode
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                      <div className="bg-blue-100 p-3 rounded-lg shrink-0">
+                        <Package className="size-5 text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium break-words ${darkMode ? 'text-white' : ''}`}>{product.name}</p>
+                        <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {product.category} • Stock: {formatNumber(product.stock)}
+                          {product.stock === 0 && (
+                            <span className="text-red-600 ml-2">(Sin Stock)</span>
+                          )}
+                          {product.stock > 0 && product.stock <= lowStockThreshold && (
+                            <span className="text-orange-600 ml-2">(Bajo Stock)</span>
+                          )}
+                        </p>
+                        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Estado: <span className={((product.status || '').toLowerCase().includes('inhabilitado') || (product.status || '').toLowerCase().includes('inactivo')) ? 'text-red-600' : 'text-green-600'}>{product.status || 'Habilitado'}</span>
+                        </p>
+                      </div>
+                      <div className="basis-full sm:basis-auto w-full sm:w-auto text-left sm:text-right sm:ml-auto">
+                        <p className={`font-semibold text-lg ${darkMode ? 'text-white' : ''}`}>
+                          {formatCurrency(product.price)}
+                        </p>
+                        <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Total: {formatCurrency(product.price * product.stock)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 sm:ml-2 self-end sm:self-auto shrink-0">
+                      {isInactive && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReactivate(product.id)}
+                          title="Rehabilitar producto"
+                        >
+                          <RotateCcw className="size-4 text-emerald-600" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDetailsWithMovements(product)}
+                      >
+                        <Package className="size-4 text-green-600" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditClick(product)}
+                        disabled={isInactive}
+                        className={isInactive ? "opacity-50 cursor-not-allowed" : ""}
+                      >
+                        <Pencil className="size-4 text-blue-600" />
+                      </Button>
+                      {!isInactive && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(product.id)}
+                        >
+                          <Trash2 className="size-4 text-red-600" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                    );
+                  })()
+                ))}
+
+                {productsTotalPages > 1 && (
+                  <div className="flex items-center justify-between pt-4 border-t" style={{borderColor: darkMode ? '#4b5563' : '#e5e7eb'}}>
+                    <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Página {productsPage} de {productsTotalPages} ({formatNumber(sortedProducts.length)} productos)
+                    </p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" disabled={productsPage === 1}
+                        onClick={() => setProductsPage((p) => Math.max(1, p - 1))}
+                        className={darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : ''}>
+                        ← Anterior
+                      </Button>
+                      <Button variant="outline" size="sm" disabled={productsPage === productsTotalPages}
+                        onClick={() => setProductsPage((p) => Math.min(productsTotalPages, p + 1))}
+                        className={darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : ''}>
+                        Siguiente →
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className={`sm:max-w-[500px] ${darkMode ? 'bg-gray-800 border-gray-700' : ''}`}>
+          <DialogHeader>
+            <DialogTitle className={darkMode ? 'text-white' : ''}>Modificar Producto</DialogTitle>
+            <DialogDescription className={darkMode ? 'text-gray-400' : ''}>
+              Actualiza la información del producto en la base de datos
+            </DialogDescription>
+          </DialogHeader>
+          {editingProduct && (
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="edit-name" className={darkMode ? 'text-gray-200' : ''}>Nombre del Producto</Label>
+                <Input
+                  id="edit-name"
+                  value={editingProduct.name}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, name: e.target.value.toUpperCase() })
+                  }
+                  placeholder="Ingresa el nombre del producto"
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-price" className={darkMode ? 'text-gray-200' : ''}>Precio de Venta (Q)</Label>
+                <Input
+                  id="edit-price"
+                  type="number"
+                  step="0.01"
+                  value={editingProduct.price}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, price: e.target.value })
+                  }
+                  placeholder="0.00"
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-purchase-price" className={darkMode ? 'text-gray-200' : ''}>Costo (Q)</Label>
+                <Input
+                  id="edit-purchase-price"
+                  type="number"
+                  step="0.01"
+                  value={editingProduct.purchasePrice || ''}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, purchasePrice: e.target.value })
+                  }
+                  placeholder="0.00"
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-stock" className={darkMode ? 'text-gray-200' : ''}>Cantidad de Stock</Label>
+                <Input
+                  id="edit-stock"
+                  type="number"
+                  value={editingProduct.stock}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, stock: e.target.value })
+                  }
+                  placeholder="0"
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-category" className={darkMode ? 'text-gray-200' : ''}>Categoría</Label>
+                <Input
+                  id="edit-category"
+                  value={editingProduct.category}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, category: e.target.value.toUpperCase() })
+                  }
+                  placeholder="Ej: Electrónica, Accesorios"
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-barcode" className={darkMode ? 'text-gray-200' : ''}>Código de Barras (Opcional)</Label>
+                <Input
+                  id="edit-barcode"
+                  value={editingProduct.barcode}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, barcode: e.target.value.toUpperCase() })
+                  }
+                  placeholder="Ingresa código de barras"
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-observations" className={darkMode ? 'text-gray-200' : ''}>Observaciones (Opcional)</Label>
+                <Textarea
+                  id="edit-observations"
+                  value={editingProduct.observations}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, observations: e.target.value.toUpperCase() })
+                  }
+                  placeholder="Ingresa notas u observaciones sobre el producto"
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={handleEditCancel}>
+              Cancelar
+            </Button>
+            <Button onClick={handleEditSave}>
+              Guardar Cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className={`sm:max-w-[400px] ${darkMode ? 'bg-gray-800 border-gray-700' : ''}`}>
+          <DialogHeader>
+            <DialogTitle className={darkMode ? 'text-white' : ''}>Confirmar Inhabilitación</DialogTitle>
+            <DialogDescription className={darkMode ? 'text-gray-400' : ''}>
+              ¿Estás seguro de que deseas inhabilitar este producto?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelDelete}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Inhabilitar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Details Dialog */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className={`sm:max-w-[680px] max-h-[80vh] overflow-y-auto ${darkMode ? 'bg-gray-800 border-gray-700' : ''}`}>
+          <DialogHeader>
+            <DialogTitle className={darkMode ? 'text-white' : ''}>Detalles del Producto</DialogTitle>
+            <DialogDescription className={darkMode ? 'text-gray-400' : ''}>
+              Información completa del producto
+            </DialogDescription>
+          </DialogHeader>
+          {selectedProductForDetails && (
+            <div className="space-y-4 py-4">
+              <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Nombre</p>
+                <p className={`font-semibold text-lg ${darkMode ? 'text-white' : ''}`}>
+                  {selectedProductForDetails.name}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Categoría</p>
+                  <p className={`font-semibold ${darkMode ? 'text-white' : ''}`}>
+                    {selectedProductForDetails.category}
+                  </p>
+                </div>
+
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Stock</p>
+                  <p className={`font-semibold text-lg ${darkMode ? 'text-white' : ''}`}>
+                    {formatNumber(selectedProductForDetails.stock)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Precio de Venta</p>
+                  <p className={`font-semibold text-lg text-green-600`}>
+                    {formatCurrency(selectedProductForDetails.price)}
+                  </p>
+                </div>
+
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Precio de Compra</p>
+                  <p className={`font-semibold text-lg text-blue-600`}>
+                    {formatCurrency(selectedProductForDetails.purchasePrice || 0)}
+                  </p>
+                </div>
+              </div>
+
+              <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Beneficio por Unidad</p>
+                <p className={`font-semibold text-lg text-purple-600`}>
+                  {formatCurrency(selectedProductForDetails.price - (selectedProductForDetails.purchasePrice || 0))}
+                </p>
+              </div>
+
+              <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Valor Total en Inventario</p>
+                <p className={`font-semibold text-lg text-blue-600`}>
+                  {formatCurrency(selectedProductForDetails.price * selectedProductForDetails.stock)}
+                </p>
+              </div>
+
+              {selectedProductForDetails.barcode && (
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Código de Barras</p>
+                  <p className={`font-semibold font-mono ${darkMode ? 'text-white' : ''}`}>
+                    {selectedProductForDetails.barcode}
+                  </p>
+                </div>
+              )}
+
+              {selectedProductForDetails.observations && (
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Observaciones</p>
+                  <p className={`font-semibold ${darkMode ? 'text-white' : ''}`}>
+                    {selectedProductForDetails.observations}
+                  </p>
+                </div>
+              )}
+
+              <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <p className={`text-sm font-semibold mb-3 ${darkMode ? 'text-white' : ''}`}>
+                  Historial de Movimientos
+                </p>
+
+                {isLoadingMovements ? (
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Cargando historial...
+                  </p>
+                ) : productMovements.length === 0 ? (
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    No hay movimientos registrados para este producto.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {productMovements.map((movement) => (
+                      <div
+                        key={movement.id}
+                        className={`p-3 rounded border ${darkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-200 bg-white'}`}
+                      >
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                            {getMovementTypeLabel(movement.type)}
+                          </p>
+                          <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {formatDateTime(movement.created_at)}
+                          </p>
+                        </div>
+
+                        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Usuario: <span className="font-semibold">{movement.user_name || movement.user_id || 'Sistema'}</span>
+                        </p>
+
+                        {!!movement.description && (
+                          <p className={`text-xs mt-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                            {movement.description}
+                          </p>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                          <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            Stock: {movement.previous_stock ?? '—'} {'->'} {movement.new_stock ?? '—'}
+                          </p>
+                          <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            Precio: {movement.previous_price === null ? '—' : formatCurrency(movement.previous_price)} {'->'} {movement.new_price === null ? '—' : formatCurrency(movement.new_price)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              onClick={() => setIsDetailsDialogOpen(false)}
+            >
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      </div>
+    </div>
+  );
+}
+
+

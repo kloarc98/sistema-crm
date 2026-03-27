@@ -1,0 +1,1048 @@
+[
+  {
+    "depCode": 10,
+    "depName": "GUATEMALA",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Municipio de Guatemala",
+        "fullCode": "0101"
+      },
+      {
+        "munId": 2,
+        "munName": "Santa Catarina Pinula",
+        "fullCode": "0102"
+      },
+      {
+        "munId": 3,
+        "munName": "San José Pinula",
+        "fullCode": "0103"
+      },
+      {
+        "munId": 4,
+        "munName": "San José del Golfo",
+        "fullCode": "0104"
+      },
+      {
+        "munId": 5,
+        "munName": "Palencia",
+        "fullCode": "0105"
+      },
+      {
+        "munId": 6,
+        "munName": "Chinautla",
+        "fullCode": "0106"
+      },
+      {
+        "munId": 7,
+        "munName": "San Pedro Ayampuc",
+        "fullCode": "0107"
+      },
+      {
+        "munId": 8,
+        "munName": "Mixco",
+        "fullCode": "0108"
+      },
+      {
+        "munId": 9,
+        "munName": "San Pedro Sacatepéquez",
+        "fullCode": "0109"
+      }
+    ]
+  },
+  {
+    "depCode": 20,
+    "depName": "EL PROGRESO",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Guastatoya",
+        "fullCode": "0201"
+      },
+      {
+        "munId": 2,
+        "munName": "Morazán",
+        "fullCode": "0202"
+      },
+      {
+        "munId": 3,
+        "munName": "San Agustín Acasaguastlán",
+        "fullCode": "0203"
+      },
+      {
+        "munId": 4,
+        "munName": "San Cristobal Acasaguastlán",
+        "fullCode": "0204"
+      },
+      {
+        "munId": 5,
+        "munName": "El Jícaro",
+        "fullCode": "0205"
+      },
+      {
+        "munId": 6,
+        "munName": "Sansare",
+        "fullCode": "0206"
+      },
+      {
+        "munId": 7,
+        "munName": "Sanarate",
+        "fullCode": "0207"
+      },
+      {
+        "munId": 8,
+        "munName": "San Antonio La Paz",
+        "fullCode": "0208"
+      }
+    ]
+  },
+  {
+    "depCode": 30,
+    "depName": "SACATEPÉQUEZ",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Antigua Guatemala",
+        "fullCode": "0301"
+      },
+      {
+        "munId": 2,
+        "munName": "Jocotenango",
+        "fullCode": "0302"
+      },
+      {
+        "munId": 3,
+        "munName": "Pastores",
+        "fullCode": "0303"
+      },
+      {
+        "munId": 4,
+        "munName": "Sumpango",
+        "fullCode": "0304"
+      },
+      {
+        "munId": 5,
+        "munName": "Santo Domingo Xenacoj",
+        "fullCode": "0305"
+      },
+      {
+        "munId": 6,
+        "munName": "Santiago Sacatepéquez",
+        "fullCode": "0306"
+      },
+      {
+        "munId": 7,
+        "munName": "San Bartolomé Milpas Altas",
+        "fullCode": "0307"
+      },
+      {
+        "munId": 8,
+        "munName": "San Lucas Sacatepéquez",
+        "fullCode": "0308"
+      },
+      {
+        "munId": 9,
+        "munName": "Santa Lucia Milpas Altas",
+        "fullCode": "0309"
+      }
+    ]
+  },
+  {
+    "depCode": 40,
+    "depName": "CHIMALTENANGO",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Chimaltenango",
+        "fullCode": "0401"
+      },
+      {
+        "munId": 2,
+        "munName": "San José Poaquil",
+        "fullCode": "0402"
+      },
+      {
+        "munId": 3,
+        "munName": "San MartÍn Jilotepeque",
+        "fullCode": "0403"
+      },
+      {
+        "munId": 4,
+        "munName": "Comalapa",
+        "fullCode": "0404"
+      },
+      {
+        "munId": 5,
+        "munName": "Santa Apolonia",
+        "fullCode": "0405"
+      },
+      {
+        "munId": 6,
+        "munName": "Tecpan Guatemala",
+        "fullCode": "0406"
+      },
+      {
+        "munId": 7,
+        "munName": "Patzun",
+        "fullCode": "0407"
+      },
+      {
+        "munId": 8,
+        "munName": "Pochuta",
+        "fullCode": "0408"
+      },
+      {
+        "munId": 9,
+        "munName": "Patzicía",
+        "fullCode": "0409"
+      }
+    ]
+  },
+  {
+    "depCode": 50,
+    "depName": "ESCUINTLA",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Escuintla",
+        "fullCode": "0501"
+      },
+      {
+        "munId": 2,
+        "munName": "Santa Lucía Cotzumalguapa",
+        "fullCode": "0502"
+      },
+      {
+        "munId": 3,
+        "munName": "La Democracia",
+        "fullCode": "0503"
+      },
+      {
+        "munId": 4,
+        "munName": "Siquinala",
+        "fullCode": "0504"
+      },
+      {
+        "munId": 5,
+        "munName": "Masagua",
+        "fullCode": "0505"
+      },
+      {
+        "munId": 6,
+        "munName": "Tiquisate",
+        "fullCode": "0506"
+      },
+      {
+        "munId": 7,
+        "munName": "La Gomera",
+        "fullCode": "0507"
+      },
+      {
+        "munId": 8,
+        "munName": "Guanagazapa",
+        "fullCode": "0508"
+      },
+      {
+        "munId": 9,
+        "munName": "San José",
+        "fullCode": "0509"
+      }
+    ]
+  },
+  {
+    "depCode": 60,
+    "depName": "SANTA ROSA",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Cuilapa",
+        "fullCode": "0601"
+      },
+      {
+        "munId": 2,
+        "munName": "Barberena",
+        "fullCode": "0602"
+      },
+      {
+        "munId": 3,
+        "munName": "Santa Rosa De Lima",
+        "fullCode": "0603"
+      },
+      {
+        "munId": 4,
+        "munName": "Casillas",
+        "fullCode": "0604"
+      },
+      {
+        "munId": 5,
+        "munName": "San Rafael Las Flores",
+        "fullCode": "0605"
+      },
+      {
+        "munId": 6,
+        "munName": "Oratorio",
+        "fullCode": "0606"
+      },
+      {
+        "munId": 7,
+        "munName": "San Juan Tecuaco",
+        "fullCode": "0607"
+      },
+      {
+        "munId": 8,
+        "munName": "Chiquimulilla",
+        "fullCode": "0608"
+      },
+      {
+        "munId": 9,
+        "munName": "Taxisco",
+        "fullCode": "0609"
+      }
+    ]
+  },
+  {
+    "depCode": 70,
+    "depName": "SOLOLÁ",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Sololá",
+        "fullCode": "0701"
+      },
+      {
+        "munId": 2,
+        "munName": "San José Chacayá",
+        "fullCode": "0702"
+      },
+      {
+        "munId": 3,
+        "munName": "Santa María Visitación",
+        "fullCode": "0703"
+      },
+      {
+        "munId": 4,
+        "munName": "Santa Lucía Utatlan",
+        "fullCode": "0704"
+      },
+      {
+        "munId": 5,
+        "munName": "Nahuala",
+        "fullCode": "0705"
+      },
+      {
+        "munId": 6,
+        "munName": "Santa Catarina Ixtahuacan",
+        "fullCode": "0706"
+      },
+      {
+        "munId": 7,
+        "munName": "Santa Clara La Laguna",
+        "fullCode": "0707"
+      },
+      {
+        "munId": 8,
+        "munName": "Concepción",
+        "fullCode": "0708"
+      },
+      {
+        "munId": 9,
+        "munName": "San Andrés Semetabaj",
+        "fullCode": "0709"
+      }
+    ]
+  },
+  {
+    "depCode": 80,
+    "depName": "TOTONICAPAN",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Totonicapán",
+        "fullCode": "0801"
+      },
+      {
+        "munId": 2,
+        "munName": "San Cristóbal Totonicapan",
+        "fullCode": "0802"
+      },
+      {
+        "munId": 3,
+        "munName": "San Francisco El Alto",
+        "fullCode": "0803"
+      },
+      {
+        "munId": 4,
+        "munName": "San Andrés Xecul",
+        "fullCode": "0804"
+      },
+      {
+        "munId": 5,
+        "munName": "Momostenango",
+        "fullCode": "0805"
+      },
+      {
+        "munId": 6,
+        "munName": "Santa María Chiquimula",
+        "fullCode": "0806"
+      },
+      {
+        "munId": 7,
+        "munName": "Santa Lucía La Reforma",
+        "fullCode": "0807"
+      },
+      {
+        "munId": 8,
+        "munName": "San Bartolo 090 DEPARTAMENTO DE QUETZALTENANGO",
+        "fullCode": "0808"
+      }
+    ]
+  },
+  {
+    "depCode": 90,
+    "depName": "QUETZALTENANGO",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Quetzaltenango",
+        "fullCode": "0901"
+      },
+      {
+        "munId": 2,
+        "munName": "Salcajá",
+        "fullCode": "0902"
+      },
+      {
+        "munId": 3,
+        "munName": "Olintepeque",
+        "fullCode": "0903"
+      },
+      {
+        "munId": 4,
+        "munName": "San Carlos Sija",
+        "fullCode": "0904"
+      },
+      {
+        "munId": 5,
+        "munName": "Sibilia",
+        "fullCode": "0905"
+      },
+      {
+        "munId": 6,
+        "munName": "Cabricán",
+        "fullCode": "0906"
+      },
+      {
+        "munId": 7,
+        "munName": "Cajolá",
+        "fullCode": "0907"
+      },
+      {
+        "munId": 8,
+        "munName": "San Miguel Siguilá",
+        "fullCode": "0908"
+      },
+      {
+        "munId": 9,
+        "munName": "Ostuncalco",
+        "fullCode": "0909"
+      }
+    ]
+  },
+  {
+    "depCode": 100,
+    "depName": "SUCHITEPÉQUEZ",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Mazatenango",
+        "fullCode": "1001"
+      },
+      {
+        "munId": 2,
+        "munName": "Cuyotenango",
+        "fullCode": "1002"
+      },
+      {
+        "munId": 3,
+        "munName": "San Francisco Zapotitlán",
+        "fullCode": "1003"
+      },
+      {
+        "munId": 4,
+        "munName": "San Bernardino",
+        "fullCode": "1004"
+      },
+      {
+        "munId": 5,
+        "munName": "San José El Idolo",
+        "fullCode": "1005"
+      },
+      {
+        "munId": 6,
+        "munName": "Santo Domingo Suchitepéquez",
+        "fullCode": "1006"
+      },
+      {
+        "munId": 7,
+        "munName": "San Lorenzo",
+        "fullCode": "1007"
+      },
+      {
+        "munId": 8,
+        "munName": "Samayac",
+        "fullCode": "1008"
+      },
+      {
+        "munId": 9,
+        "munName": "San Pablo Jocopilas",
+        "fullCode": "1009"
+      }
+    ]
+  },
+  {
+    "depCode": 110,
+    "depName": "RETALHULEU",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Retalhuleu",
+        "fullCode": "1101"
+      },
+      {
+        "munId": 2,
+        "munName": "San Sebastián",
+        "fullCode": "1102"
+      },
+      {
+        "munId": 3,
+        "munName": "Santa Cruz Muluá",
+        "fullCode": "1103"
+      },
+      {
+        "munId": 4,
+        "munName": "San Martín Zapotitlán",
+        "fullCode": "1104"
+      },
+      {
+        "munId": 5,
+        "munName": "San Felipe",
+        "fullCode": "1105"
+      },
+      {
+        "munId": 6,
+        "munName": "San Andrés Villa Seca",
+        "fullCode": "1106"
+      },
+      {
+        "munId": 7,
+        "munName": "Champerico",
+        "fullCode": "1107"
+      },
+      {
+        "munId": 8,
+        "munName": "Nuevo San Carlos",
+        "fullCode": "1108"
+      },
+      {
+        "munId": 9,
+        "munName": "El Asintal",
+        "fullCode": "1109"
+      }
+    ]
+  },
+  {
+    "depCode": 120,
+    "depName": "SAN MARCOS",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "San Marcos",
+        "fullCode": "1201"
+      },
+      {
+        "munId": 2,
+        "munName": "San Pedro Sacatepéquez",
+        "fullCode": "1202"
+      },
+      {
+        "munId": 3,
+        "munName": "San Antonio Sacatepéquez",
+        "fullCode": "1203"
+      },
+      {
+        "munId": 4,
+        "munName": "Comitancillo",
+        "fullCode": "1204"
+      },
+      {
+        "munId": 5,
+        "munName": "San Miguel Ixtahuacán",
+        "fullCode": "1205"
+      },
+      {
+        "munId": 6,
+        "munName": "Concepción Tutuapa",
+        "fullCode": "1206"
+      },
+      {
+        "munId": 7,
+        "munName": "Tacaná",
+        "fullCode": "1207"
+      },
+      {
+        "munId": 8,
+        "munName": "Sibinal",
+        "fullCode": "1208"
+      },
+      {
+        "munId": 9,
+        "munName": "Tajumulco",
+        "fullCode": "1209"
+      }
+    ]
+  },
+  {
+    "depCode": 130,
+    "depName": "HUEHUETENANGO",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Huehuetenango",
+        "fullCode": "1301"
+      },
+      {
+        "munId": 2,
+        "munName": "Chiantla",
+        "fullCode": "1302"
+      },
+      {
+        "munId": 3,
+        "munName": "Malacatancito",
+        "fullCode": "1303"
+      },
+      {
+        "munId": 4,
+        "munName": "Cuilco",
+        "fullCode": "1304"
+      },
+      {
+        "munId": 5,
+        "munName": "Nentón",
+        "fullCode": "1305"
+      },
+      {
+        "munId": 6,
+        "munName": "San Pedro Necta",
+        "fullCode": "1306"
+      },
+      {
+        "munId": 7,
+        "munName": "Jacaltenango",
+        "fullCode": "1307"
+      },
+      {
+        "munId": 8,
+        "munName": "Soloma",
+        "fullCode": "1308"
+      },
+      {
+        "munId": 9,
+        "munName": "Ixtahuacán",
+        "fullCode": "1309"
+      }
+    ]
+  },
+  {
+    "depCode": 140,
+    "depName": "EL QUICHÉ",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Santa Cruz del Quiché",
+        "fullCode": "1401"
+      },
+      {
+        "munId": 2,
+        "munName": "Chiché",
+        "fullCode": "1402"
+      },
+      {
+        "munId": 3,
+        "munName": "Chinique",
+        "fullCode": "1403"
+      },
+      {
+        "munId": 4,
+        "munName": "Zacualpa",
+        "fullCode": "1404"
+      },
+      {
+        "munId": 5,
+        "munName": "Chajul",
+        "fullCode": "1405"
+      },
+      {
+        "munId": 6,
+        "munName": "Chichicastenango",
+        "fullCode": "1406"
+      },
+      {
+        "munId": 7,
+        "munName": "Patzité",
+        "fullCode": "1407"
+      },
+      {
+        "munId": 8,
+        "munName": "San Antonio Ilotenango",
+        "fullCode": "1408"
+      },
+      {
+        "munId": 9,
+        "munName": "San Pedro Jocopilas",
+        "fullCode": "1409"
+      }
+    ]
+  },
+  {
+    "depCode": 150,
+    "depName": "BAJA VERAPAZ",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Salamá",
+        "fullCode": "1501"
+      },
+      {
+        "munId": 2,
+        "munName": "San Miguel Chicaj",
+        "fullCode": "1502"
+      },
+      {
+        "munId": 3,
+        "munName": "Rabinal",
+        "fullCode": "1503"
+      },
+      {
+        "munId": 4,
+        "munName": "Cubulco",
+        "fullCode": "1504"
+      },
+      {
+        "munId": 5,
+        "munName": "Granados",
+        "fullCode": "1505"
+      },
+      {
+        "munId": 6,
+        "munName": "El Chol",
+        "fullCode": "1506"
+      },
+      {
+        "munId": 7,
+        "munName": "San Jerónimo",
+        "fullCode": "1507"
+      },
+      {
+        "munId": 8,
+        "munName": "Purulhß",
+        "fullCode": "1508"
+      }
+    ]
+  },
+  {
+    "depCode": 160,
+    "depName": "ALTA VERAPAZ",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Cobán",
+        "fullCode": "1601"
+      },
+      {
+        "munId": 2,
+        "munName": "Santa Cruz Verapaz",
+        "fullCode": "1602"
+      },
+      {
+        "munId": 3,
+        "munName": "San Cristóbal Verapaz",
+        "fullCode": "1603"
+      },
+      {
+        "munId": 4,
+        "munName": "Tactic",
+        "fullCode": "1604"
+      },
+      {
+        "munId": 5,
+        "munName": "Tamahù",
+        "fullCode": "1605"
+      },
+      {
+        "munId": 6,
+        "munName": "Tucurú",
+        "fullCode": "1606"
+      },
+      {
+        "munId": 7,
+        "munName": "Panzós",
+        "fullCode": "1607"
+      },
+      {
+        "munId": 8,
+        "munName": "Senahú",
+        "fullCode": "1608"
+      },
+      {
+        "munId": 9,
+        "munName": "San Pedro Carchá",
+        "fullCode": "1609"
+      }
+    ]
+  },
+  {
+    "depCode": 170,
+    "depName": "EL PETÉN",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Flores",
+        "fullCode": "1701"
+      },
+      {
+        "munId": 2,
+        "munName": "San José",
+        "fullCode": "1702"
+      },
+      {
+        "munId": 3,
+        "munName": "San Benito",
+        "fullCode": "1703"
+      },
+      {
+        "munId": 4,
+        "munName": "San Andrés",
+        "fullCode": "1704"
+      },
+      {
+        "munId": 5,
+        "munName": "La Libertad",
+        "fullCode": "1705"
+      },
+      {
+        "munId": 6,
+        "munName": "San Francisco",
+        "fullCode": "1706"
+      },
+      {
+        "munId": 7,
+        "munName": "Santa Ana",
+        "fullCode": "1707"
+      },
+      {
+        "munId": 8,
+        "munName": "Dolores",
+        "fullCode": "1708"
+      },
+      {
+        "munId": 9,
+        "munName": "San Luis",
+        "fullCode": "1709"
+      }
+    ]
+  },
+  {
+    "depCode": 190,
+    "depName": "ZACAPA",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Zacapa",
+        "fullCode": "1901"
+      },
+      {
+        "munId": 2,
+        "munName": "Estanzuela",
+        "fullCode": "1902"
+      },
+      {
+        "munId": 3,
+        "munName": "Río Hondo",
+        "fullCode": "1903"
+      },
+      {
+        "munId": 4,
+        "munName": "Gualán",
+        "fullCode": "1904"
+      },
+      {
+        "munId": 5,
+        "munName": "Teculután",
+        "fullCode": "1905"
+      },
+      {
+        "munId": 6,
+        "munName": "Usumatlán",
+        "fullCode": "1906"
+      },
+      {
+        "munId": 7,
+        "munName": "Cabañas",
+        "fullCode": "1907"
+      },
+      {
+        "munId": 8,
+        "munName": "San Diego",
+        "fullCode": "1908"
+      },
+      {
+        "munId": 9,
+        "munName": "La Unión",
+        "fullCode": "1909"
+      }
+    ]
+  },
+  {
+    "depCode": 200,
+    "depName": "CHIQUIMULA",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Chiquimula",
+        "fullCode": "2001"
+      },
+      {
+        "munId": 2,
+        "munName": "San José La Arada",
+        "fullCode": "2002"
+      },
+      {
+        "munId": 3,
+        "munName": "San Juan Ermita",
+        "fullCode": "2003"
+      },
+      {
+        "munId": 4,
+        "munName": "Jocotán",
+        "fullCode": "2004"
+      },
+      {
+        "munId": 5,
+        "munName": "Camotán",
+        "fullCode": "2005"
+      },
+      {
+        "munId": 6,
+        "munName": "Olopa",
+        "fullCode": "2006"
+      },
+      {
+        "munId": 7,
+        "munName": "Esquipulas",
+        "fullCode": "2007"
+      },
+      {
+        "munId": 8,
+        "munName": "Concepción Las Minas",
+        "fullCode": "2008"
+      },
+      {
+        "munId": 9,
+        "munName": "Quetzaltepeque",
+        "fullCode": "2009"
+      }
+    ]
+  },
+  {
+    "depCode": 210,
+    "depName": "JALAPA",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Jalapa",
+        "fullCode": "2101"
+      },
+      {
+        "munId": 2,
+        "munName": "San Pedro Pinula",
+        "fullCode": "2102"
+      },
+      {
+        "munId": 3,
+        "munName": "San Luis Jilotepeque",
+        "fullCode": "2103"
+      },
+      {
+        "munId": 4,
+        "munName": "San Manuel Chaparrón",
+        "fullCode": "2104"
+      },
+      {
+        "munId": 5,
+        "munName": "San Carlos Alzatate",
+        "fullCode": "2105"
+      },
+      {
+        "munId": 6,
+        "munName": "Monjas",
+        "fullCode": "2106"
+      },
+      {
+        "munId": 7,
+        "munName": "Mataquescuintla",
+        "fullCode": "2107"
+      }
+    ]
+  },
+  {
+    "depCode": 220,
+    "depName": "JUTIAPA",
+    "municipalities": [
+      {
+        "munId": 1,
+        "munName": "Jutiapa",
+        "fullCode": "2201"
+      },
+      {
+        "munId": 2,
+        "munName": "El Progreso",
+        "fullCode": "2202"
+      },
+      {
+        "munId": 3,
+        "munName": "Santa Catarina Mita",
+        "fullCode": "2203"
+      },
+      {
+        "munId": 4,
+        "munName": "Agua Blanca",
+        "fullCode": "2204"
+      },
+      {
+        "munId": 5,
+        "munName": "Asunción Mita",
+        "fullCode": "2205"
+      },
+      {
+        "munId": 6,
+        "munName": "Yupiltepeque",
+        "fullCode": "2206"
+      },
+      {
+        "munId": 7,
+        "munName": "Atescatempa",
+        "fullCode": "2207"
+      },
+      {
+        "munId": 8,
+        "munName": "Jerez",
+        "fullCode": "2208"
+      },
+      {
+        "munId": 9,
+        "munName": "El Adelanto",
+        "fullCode": "2209"
+      }
+    ]
+  }
+]
