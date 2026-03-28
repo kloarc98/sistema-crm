@@ -1637,8 +1637,8 @@ export function DashboardAnalytics() {
                 Resumen por estado
               </h2>
             </div>
-            <div className="px-3 pb-4 overflow-x-auto">
-              <table className="w-full min-w-[680px] text-sm" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+            <div className="px-3 pb-4">
+              <table className="w-full text-sm" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
                 <thead>
                   <tr>
                     {["Estado", "Pedidos", "% del total", "Monto"].map((col) => (
@@ -1732,9 +1732,8 @@ export function DashboardAnalytics() {
                 Top 10 clientes
               </h2>
             </div>
-            <div className="px-3 pb-4 overflow-auto" style={{ maxHeight: 340 }}>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+            <div className="px-3 pb-4 overflow-y-auto" style={{ maxHeight: 340 }}>
+                <table className="w-full text-sm" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
                 <thead>
                   <tr>
                     {["Cliente", "Pedidos", "Monto"].map((col) => (
@@ -1759,7 +1758,7 @@ export function DashboardAnalytics() {
                 <tbody>
                   {topClientsData.map((client) => (
                     <tr key={`${client.client_id}-${client.client_name}`} style={{ borderBottom: `1px solid ${cardBorder}` }}>
-                      <td className="pl-2 py-2.5" style={{ color: textPrimary, fontWeight: 500 }}>
+                      <td className="pl-2 py-2.5 max-w-[220px] break-words" style={{ color: textPrimary, fontWeight: 500 }}>
                         {client.client_name}
                       </td>
                       <td className="text-right pr-2 py-2.5" style={{ color: textPrimary, fontWeight: 600 }}>
@@ -1779,7 +1778,6 @@ export function DashboardAnalytics() {
                   )}
                 </tbody>
                 </table>
-              </div>
             </div>
           </div>
         </div>
