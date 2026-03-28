@@ -125,6 +125,58 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/doh', async (req, res) => {
+  const days = Math.max(1, Math.min(365, Number(req.query.days) || 30));
+  try {
+    const rows = await query(
+      `SELECT
+        p.prod_id AS id,
+        p.prod_nombre AS name,
+        COALESCE(p.prod_categoria, 'GENERAL') AS category,
+        COALESCE(p.prod_stock, 0) AS stock,
+        COALESCE(SUM(
+          CASE
+            WHEN ped.ped_id IS NOT NULL
+              AND ped.fecha_creacion >= DATE_SUB(NOW(), INTERVAL ? DAY)
+              AND LOWER(COALESCE(eped.est_ped_nombre, '')) NOT LIKE 'cancel%'
+            THEN det.det_cantidad
+            ELSE 0
+          END
+        ), 0) AS sold
+      FROM producto p
+      LEFT JOIN estado_producto ep ON ep.est_pro_id = p.est_pro_id
+      LEFT JOIN pedido_detalle det ON det.prod_id = p.prod_id
+      LEFT JOIN pedidos ped ON ped.ped_id = det.ped_id
+      LEFT JOIN estado_pedido eped ON eped.est_ped_id = ped.est_ped_id
+      WHERE LOWER(COALESCE(ep.est_pro_nombre, 'habilitado')) NOT LIKE 'inhabilitad%'
+        AND LOWER(COALESCE(ep.est_pro_nombre, 'habilitado')) NOT LIKE 'inactiv%'
+      GROUP BY p.prod_id, p.prod_nombre, p.prod_categoria, p.prod_stock
+      ORDER BY p.prod_nombre ASC`,
+      [days]
+    );
+
+    const result = rows.map((row) => {
+      const stock = Number(row.stock || 0);
+      const sold = Number(row.sold || 0);
+      const dailyAvg = sold / days;
+      const doh = dailyAvg > 0 ? Math.round(stock / dailyAvg) : null;
+      return {
+        id: Number(row.id),
+        name: String(row.name || ''),
+        category: String(row.category || 'GENERAL'),
+        stock,
+        sold,
+        dailyAvg: Math.round(dailyAvg * 10) / 10,
+        doh,
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const products = await query(

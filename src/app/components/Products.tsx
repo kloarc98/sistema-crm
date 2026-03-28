@@ -22,6 +22,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "./ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { useProducts, type ProductStatusFilter } from "../context/ProductContext";
 import { formatCurrency, formatNumber } from "../utils/numberFormat";
 import {
@@ -30,6 +31,16 @@ import {
   loadLowStockThreshold,
   LOW_STOCK_THRESHOLD_CHANGED_EVENT,
 } from "../utils/paymentReminderSettings";
+
+interface DohRow {
+  id: number;
+  name: string;
+  category: string;
+  stock: number;
+  sold: number;
+  dailyAvg: number;
+  doh: number | null;
+}
 
 interface ProductMovement {
   id: number;
@@ -89,6 +100,11 @@ export function Products() {
   const [productMovements, setProductMovements] = useState<ProductMovement[]>([]);
   const [isLoadingMovements, setIsLoadingMovements] = useState(false);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+  const [activeTab, setActiveTab] = useState("inventario");
+  const [dohDays, setDohDays] = useState(30);
+  const [dohData, setDohData] = useState<DohRow[]>([]);
+  const [dohLoading, setDohLoading] = useState(false);
+  const [dohSearch, setDohSearch] = useState("");
 
   const existingCategories = useMemo(() => {
     return Array.from(
@@ -579,6 +595,16 @@ export function Products() {
     };
   }, []);
 
+  useEffect(() => {
+    if (activeTab !== "doh") return;
+    setDohLoading(true);
+    fetch(`/api/products/doh?days=${dohDays}`)
+      .then((r) => r.json())
+      .then((data) => setDohData(Array.isArray(data) ? data : []))
+      .catch(() => setDohData([]))
+      .finally(() => setDohLoading(false));
+  }, [activeTab, dohDays]);
+
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
@@ -642,7 +668,14 @@ export function Products() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className={`mb-6 ${darkMode ? 'bg-gray-700 text-gray-300' : ''}`}>
+          <TabsTrigger value="inventario" className={darkMode ? 'data-[state=active]:bg-gray-900 data-[state=active]:text-white text-gray-400' : ''}>Inventario</TabsTrigger>
+          <TabsTrigger value="doh" className={darkMode ? 'data-[state=active]:bg-gray-900 data-[state=active]:text-white text-gray-400' : ''}>Días de Inventario (DOH)</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="inventario">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Add Product Form */}
         <Card className={`lg:col-span-1 ${darkMode ? 'bg-gray-800 border-gray-700' : ''}`}>
           <CardHeader>
@@ -1011,6 +1044,140 @@ export function Products() {
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
+
+        <TabsContent value="doh">
+          <Card className={darkMode ? 'bg-gray-800 border-gray-700' : ''}>
+            <CardHeader>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className={darkMode ? 'text-white' : ''}>Días de Inventario (DOH)</CardTitle>
+                  <p className={`text-sm mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Cuántos días dura el stock actual al ritmo de venta de los últimos {dohDays} días
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Label className={`text-sm ${darkMode ? 'text-gray-300' : ''}`}>Período:</Label>
+                  <Select value={String(dohDays)} onValueChange={(v) => setDohDays(Number(v))}>
+                    <SelectTrigger className={`w-[130px] ${darkMode ? 'bg-gray-700 border-gray-600' : ''}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">7 días</SelectItem>
+                      <SelectItem value="14">14 días</SelectItem>
+                      <SelectItem value="30">30 días</SelectItem>
+                      <SelectItem value="60">60 días</SelectItem>
+                      <SelectItem value="90">90 días</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                    <Input
+                      placeholder="Buscar producto..."
+                      value={dohSearch}
+                      autoComplete="new-password"
+                      onChange={(e) => setDohSearch(e.target.value)}
+                      className={`pl-10 w-full sm:w-52 ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}`}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-4 pt-2">
+                <span className="flex items-center gap-1.5 text-xs text-red-600"><span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500"></span>Crítico (&lt; 7 días)</span>
+                <span className="flex items-center gap-1.5 text-xs text-orange-500"><span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-400"></span>Bajo (7–14 días)</span>
+                <span className="flex items-center gap-1.5 text-xs text-green-600"><span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>OK (&gt; 14 días)</span>
+                <span className={`flex items-center gap-1.5 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-400"></span>Sin ventas en período</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {dohLoading ? (
+                <p className={`text-center py-8 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Calculando...</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[680px] text-sm">
+                    <thead>
+                      <tr className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <th className={`text-left py-2 px-3 font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Producto</th>
+                        <th className={`text-left py-2 px-3 font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Categoría</th>
+                        <th className={`text-right py-2 px-3 font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Stock</th>
+                        <th className={`text-right py-2 px-3 font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Vendido ({dohDays}d)</th>
+                        <th className={`text-right py-2 px-3 font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Venta/día</th>
+                        <th className={`text-right py-2 px-3 font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>DOH</th>
+                        <th className={`text-center py-2 px-3 font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const filtered = dohData
+                          .filter(
+                            (r) =>
+                              dohSearch.trim() === "" ||
+                              r.name.toLowerCase().includes(dohSearch.trim().toLowerCase()) ||
+                              r.category.toLowerCase().includes(dohSearch.trim().toLowerCase())
+                          )
+                          .sort((a, b) => {
+                            if (a.doh === null && b.doh === null) return 0;
+                            if (a.doh === null) return 1;
+                            if (b.doh === null) return -1;
+                            return a.doh - b.doh;
+                          });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={7} className={`text-center py-8 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {dohData.length === 0 ? "Sin datos de inventario" : "No se encontraron productos"}
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filtered.map((row) => {
+                          let dotColor = "bg-gray-400";
+                          let statusLabel = "Sin ventas";
+                          let statusClass = darkMode ? "text-gray-400" : "text-gray-500";
+                          if (row.doh !== null) {
+                            if (row.doh < 7) {
+                              dotColor = "bg-red-500"; statusLabel = "Crítico"; statusClass = "text-red-600";
+                            } else if (row.doh < 15) {
+                              dotColor = "bg-orange-400"; statusLabel = "Bajo"; statusClass = "text-orange-500";
+                            } else {
+                              dotColor = "bg-green-500"; statusLabel = "OK"; statusClass = "text-green-600";
+                            }
+                          }
+                          return (
+                            <tr
+                              key={row.id}
+                              className={`border-b last:border-b-0 ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'}`}
+                            >
+                              <td className={`py-2.5 px-3 font-medium ${darkMode ? 'text-white' : ''}`}>{row.name}</td>
+                              <td className={`py-2.5 px-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{row.category}</td>
+                              <td className={`py-2.5 px-3 text-right ${darkMode ? 'text-white' : ''}`}>{formatNumber(row.stock)}</td>
+                              <td className={`py-2.5 px-3 text-right ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{formatNumber(row.sold)}</td>
+                              <td className={`py-2.5 px-3 text-right ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                {row.dailyAvg > 0 ? row.dailyAvg.toFixed(1) : "—"}
+                              </td>
+                              <td className={`py-2.5 px-3 text-right font-bold ${darkMode ? 'text-white' : ''}`}>
+                                {row.doh !== null ? `${formatNumber(row.doh)} días` : "∞"}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${statusClass}`}>
+                                  <span className={`inline-block w-2 h-2 rounded-full ${dotColor}`}></span>
+                                  {statusLabel}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Edit Product Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
