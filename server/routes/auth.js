@@ -939,6 +939,7 @@ router.post('/login', async (req, res) => {
         u.usr_id AS id,
         u.usr_nit AS username,
         TRIM(CONCAT(COALESCE(u.usr_nombre, ''), ' ', COALESCE(u.usr_apellido, ''))) AS display_name,
+        COALESCE(r.rl_id, 0) AS role_id,
         COALESCE(r.rl_nombre, 'vendedor') AS role,
         COALESCE(r.rl_estado, 'activo') AS role_status,
         COALESCE(eu.est_nombre, 'activo') AS estado
@@ -978,6 +979,60 @@ router.post('/login', async (req, res) => {
       id: Number(user.id),
       username: String(user.username || normalizedUsername),
       displayName: String(user.display_name || user.username || normalizedUsername),
+      roleId: Number(user.role_id || 0),
+      role: String(user.role || 'vendedor'),
+      allowedPaths,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/me', async (req, res) => {
+  const requesterUserId = Number(req.headers['x-user-id'] || req.query?.userId || 0);
+
+  if (!Number.isInteger(requesterUserId) || requesterUserId <= 0) {
+    return res.status(401).json({ error: 'Usuario no autenticado' });
+  }
+
+  try {
+    const users = await query(
+      `SELECT
+        u.usr_id AS id,
+        u.usr_nit AS username,
+        TRIM(CONCAT(COALESCE(u.usr_nombre, ''), ' ', COALESCE(u.usr_apellido, ''))) AS display_name,
+        COALESCE(r.rl_id, 0) AS role_id,
+        COALESCE(r.rl_nombre, 'vendedor') AS role,
+        COALESCE(r.rl_estado, 'activo') AS role_status,
+        COALESCE(eu.est_nombre, 'activo') AS estado
+      FROM usuario u
+      LEFT JOIN rol r ON r.rl_id = u.rl_id
+      LEFT JOIN estado_usr eu ON eu.est_id = u.est_id
+      WHERE u.usr_id = ?
+      LIMIT 1`,
+      [requesterUserId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const user = users[0];
+    if (String(user.estado || '').toLowerCase() === 'inactivo') {
+      return res.status(403).json({ error: 'Usuario inactivo' });
+    }
+
+    if (String(user.role_status || 'activo').toLowerCase() === 'inactivo') {
+      return res.status(403).json({ error: 'El rol asignado al usuario esta inactivo' });
+    }
+
+    const allowedPaths = await loadAllowedScreenPathsByUserId(requesterUserId);
+
+    return res.json({
+      id: Number(user.id),
+      username: String(user.username || ''),
+      displayName: String(user.display_name || user.username || ''),
+      roleId: Number(user.role_id || 0),
       role: String(user.role || 'vendedor'),
       allowedPaths,
     });

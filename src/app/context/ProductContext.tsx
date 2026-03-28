@@ -247,7 +247,16 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       });
 
       if (!response.ok) {
-        throw new Error("No se pudo guardar el producto");
+        let backendMessage = "No se pudo guardar el producto";
+        try {
+          const payload = await response.json();
+          if (payload?.error) {
+            backendMessage = String(payload.error);
+          }
+        } catch {
+          // ignore JSON parse errors and keep fallback message
+        }
+        throw new Error(backendMessage);
       }
 
       const created = await response.json();
@@ -285,7 +294,16 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       });
 
       if (!response.ok) {
-        throw new Error("No se pudo actualizar el producto");
+        let backendMessage = "No se pudo actualizar el producto";
+        try {
+          const payload = await response.json();
+          if (payload?.error) {
+            backendMessage = String(payload.error);
+          }
+        } catch {
+          // ignore JSON parse errors and keep fallback message
+        }
+        throw new Error(backendMessage);
       }
 
       setProducts((prev) =>

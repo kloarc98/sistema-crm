@@ -58,6 +58,7 @@ function RootContent() {
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(() => loadLowStockThreshold());
   const [overdueOrders, setOverdueOrders] = useState<OverdueOrderNotification[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<LowStockNotification[]>([]);
+  const [outOfStockProducts, setOutOfStockProducts] = useState<LowStockNotification[]>([]);
   const desktopMenuWidthClass = isMenuOpen ? "md:w-64" : "md:w-20";
 
   // Redirect to login if not authenticated
@@ -162,7 +163,7 @@ function RootContent() {
     }
   };
 
-  const loadLowStockProducts = async () => {
+  const loadStockNotifications = async () => {
     try {
       const response = await fetch("/api/products");
       if (!response.ok) {
@@ -170,6 +171,18 @@ function RootContent() {
       }
 
       const products = await response.json();
+
+      const outOfStock = Array.isArray(products)
+        ? products
+            .filter((product: any) => Number(product?.stock ?? 0) <= 0)
+            .map((product: any) => ({
+              id: Number(product?.id ?? 0),
+              name: String(product?.name || "Producto sin nombre"),
+              stock: Number(product?.stock ?? 0),
+              minStock: lowStockThreshold,
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name, "es"))
+        : [];
 
       const lowStock = Array.isArray(products)
         ? products
@@ -186,15 +199,17 @@ function RootContent() {
             .sort((a, b) => a.stock - b.stock)
         : [];
 
+      setOutOfStockProducts(outOfStock);
       setLowStockProducts(lowStock);
     } catch {
+      setOutOfStockProducts([]);
       setLowStockProducts([]);
     }
   };
 
   useEffect(() => {
     loadOverdueOrders();
-    loadLowStockProducts();
+    loadStockNotifications();
   }, [user?.id, isVendedor, reminderDays, lowStockThreshold]);
 
   useEffect(() => {
@@ -203,7 +218,7 @@ function RootContent() {
     };
 
     const handleProductsChanged = () => {
-      loadLowStockProducts();
+      loadStockNotifications();
     };
 
     const handleReminderChanged = () => {
@@ -383,9 +398,11 @@ function RootContent() {
                   title="Notificaciones de pagos pendientes"
                 >
                   <Bell className="size-5" />
-                  {(overdueOrders.length + lowStockProducts.length) > 0 && (
+                  {(overdueOrders.length + lowStockProducts.length + outOfStockProducts.length) > 0 && (
                     <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[11px] leading-5 font-semibold text-center">
-                      {(overdueOrders.length + lowStockProducts.length) > 99 ? "99+" : (overdueOrders.length + lowStockProducts.length)}
+                      {(overdueOrders.length + lowStockProducts.length + outOfStockProducts.length) > 99
+                        ? "99+"
+                        : (overdueOrders.length + lowStockProducts.length + outOfStockProducts.length)}
                     </span>
                   )}
                 </button>
@@ -428,6 +445,28 @@ function RootContent() {
                           )}
 
                           {/* Low Stock Products Section */}
+                          {outOfStockProducts.length > 0 && (
+                            <div className="mb-4">
+                              <p className={`text-xs font-semibold px-2 py-2 ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                                Productos Sin Stock ({outOfStockProducts.length})
+                              </p>
+                              {outOfStockProducts.map((product) => (
+                                <div
+                                  key={`out-stock-product-${product.id}`}
+                                  className={`rounded-md px-3 py-2 mb-1 ${darkMode ? "bg-red-900 bg-opacity-30 border border-red-800" : "bg-red-50 border border-red-200"}`}
+                                >
+                                  <p className={`text-sm font-medium ${darkMode ? "text-red-200" : "text-red-900"}`}>
+                                    {product.name}
+                                  </p>
+                                  <p className={`text-xs ${darkMode ? "text-red-300" : "text-red-700"}`}>
+                                    Stock: 0 unid. Reabastecer cuanto antes.
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Low Stock Products Section */}
                           {lowStockProducts.length > 0 && (
                             <div className="mb-2">
                               <p className={`text-xs font-semibold px-2 py-2 ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
@@ -449,7 +488,7 @@ function RootContent() {
                             </div>
                           )}
 
-                          {overdueOrders.length === 0 && lowStockProducts.length === 0 && (
+                          {overdueOrders.length === 0 && lowStockProducts.length === 0 && outOfStockProducts.length === 0 && (
                             <p className={`px-2 py-3 text-sm text-center ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
                               ✓ Sin notificaciones importantes
                             </p>

@@ -151,6 +151,7 @@ export function RoleScreenPermissions() {
       );
 
       addAlert(`✓ Rol actualizado: ${normalizedRoleName}`, "success");
+      window.dispatchEvent(new CustomEvent("role-permissions:changed"));
       setIsEditScreensOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron guardar permisos por rol");
@@ -185,6 +186,7 @@ export function RoleScreenPermissions() {
       );
 
       addAlert(`✓ Rol ${nextStatus === "activo" ? "activado" : "inhabilitado"} correctamente`, "success");
+      window.dispatchEvent(new CustomEvent("role-permissions:changed"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cambiar estado del rol");
     } finally {

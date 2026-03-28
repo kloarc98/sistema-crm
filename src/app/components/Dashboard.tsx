@@ -396,30 +396,34 @@ export function Dashboard() {
               </p>
             )}
             {!!chartError && <p className="text-sm mb-3 text-red-600">{chartError}</p>}
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} />
-                <XAxis dataKey="label" stroke={darkMode ? '#9ca3af' : '#6b7280'} />
-                <YAxis yAxisId="amount" stroke={darkMode ? '#9ca3af' : '#6b7280'} />
-                <YAxis yAxisId="orders" orientation="right" stroke={darkMode ? '#9ca3af' : '#6b7280'} allowDecimals={false} />
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: darkMode ? '#1f2937' : '#fff',
-                    border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-                    color: darkMode ? '#f3f4f6' : '#000',
-                  }}
-                  formatter={(value: number, name: string) => {
-                    if (name === "Montos Totales") {
-                      return [formatMoney(Number(value || 0)), name];
-                    }
-                    return [Number(value || 0), name];
-                  }}
-                />
-                <Legend wrapperStyle={{ color: darkMode ? '#d1d5db' : '#000' }} />
-                <Bar yAxisId="amount" dataKey="totalAmount" fill="#10b981" name="Montos Totales" />
-                <Bar yAxisId="orders" dataKey="totalOrders" fill="#3b82f6" name="Pedidos Totales" />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="w-full overflow-x-auto">
+              <div className="min-w-[640px]">
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} />
+                    <XAxis dataKey="label" stroke={darkMode ? '#9ca3af' : '#6b7280'} />
+                    <YAxis yAxisId="amount" stroke={darkMode ? '#9ca3af' : '#6b7280'} />
+                    <YAxis yAxisId="orders" orientation="right" stroke={darkMode ? '#9ca3af' : '#6b7280'} allowDecimals={false} />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: darkMode ? '#1f2937' : '#fff',
+                        border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                        color: darkMode ? '#f3f4f6' : '#000',
+                      }}
+                      formatter={(value: number, name: string) => {
+                        if (name === "Montos Totales") {
+                          return [formatMoney(Number(value || 0)), name];
+                        }
+                        return [Number(value || 0), name];
+                      }}
+                    />
+                    <Legend wrapperStyle={{ color: darkMode ? '#d1d5db' : '#000' }} />
+                    <Bar yAxisId="amount" dataKey="totalAmount" fill="#10b981" name="Montos Totales" />
+                    <Bar yAxisId="orders" dataKey="totalOrders" fill="#3b82f6" name="Pedidos Totales" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

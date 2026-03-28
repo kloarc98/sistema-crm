@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Scan, TrendingUp, Trash2, Plus, X, Edit2, AlertCircle, Users } from "lucide-react";
+import { Scan, TrendingUp, Trash2, Plus, X, Edit2, AlertCircle, Users, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -17,13 +17,6 @@ import {
   DialogFooter,
   DialogDescription,
 } from "./ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
 
 interface CartItem {
   productId: string;
@@ -69,7 +62,8 @@ export function Income() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [filteredProducts, setFilteredProducts] = useState<typeof products>(products);
+  const [filteredProducts, setFilteredProducts] = useState<typeof products>([]);
+  const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
   const [currentTab, setCurrentTab] = useState<"cart" | "history">("cart");
   const [isCompletingSale, setIsCompletingSale] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +85,9 @@ export function Income() {
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [customerSearchText, setCustomerSearchText] = useState("");
+  const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
+  const [isCustomerDialogSearchOpen, setIsCustomerDialogSearchOpen] = useState(false);
   const [customerAddress, setCustomerAddress] = useState("");
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
 
@@ -108,6 +105,7 @@ export function Income() {
   const [editingCustomerName, setEditingCustomerName] = useState("");
   const [editingCustomerAddress, setEditingCustomerAddress] = useState("");
   const [editingCustomerSaleId, setEditingCustomerSaleId] = useState<string | null>(null);
+  const [isEditCustomerNameSearchOpen, setIsEditCustomerNameSearchOpen] = useState(false);
 
   const notifyOrdersChanged = () => {
     window.dispatchEvent(new CustomEvent("orders:changed"));
@@ -172,14 +170,15 @@ export function Income() {
 
   const handleSearchInput = (value: string) => {
     setSearchInput(value);
+    setIsProductSearchOpen(true);
+    const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name, "es"));
     
-    // Only show products when actively searching
     if (!value.trim()) {
-      setFilteredProducts([]);
+      setFilteredProducts(sortedProducts.slice(0, 20));
       return;
     }
 
-    const filtered = products.filter(
+    const filtered = sortedProducts.filter(
       (product) =>
         product.name.toLowerCase().includes(value.toLowerCase()) ||
         (product.barcode && product.barcode.includes(value))
@@ -236,9 +235,34 @@ export function Income() {
       addAlert(`El producto ${product.name} no tiene stock disponible`, "warning");
       return;
     }
+    setIsProductSearchOpen(false);
     setSelectedProductToAdd(product);
     setAddProductQuantity(1);
     setIsAddProductModalOpen(true);
+  };
+
+  const filterClientsByQuery = (query: string) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const sortedClients = [...clientOptions].sort((a, b) =>
+      a.nombreEmpresa.localeCompare(b.nombreEmpresa, "es")
+    );
+
+    if (!normalizedQuery) {
+      return sortedClients;
+    }
+
+    return sortedClients.filter((client) =>
+      client.nombreEmpresa.toLowerCase().includes(normalizedQuery)
+    );
+  };
+
+  const handleClientSelection = (client: ClientOption) => {
+    setCustomerId(client.id);
+    setCustomerName(client.nombreEmpresa);
+    setCustomerSearchText(client.nombreEmpresa);
+    setCustomerAddress(client.direccion || "");
+    setIsCustomerSearchOpen(false);
+    setIsCustomerDialogSearchOpen(false);
   };
 
   const handleConfirmAddProduct = () => {
@@ -576,6 +600,7 @@ export function Income() {
       setCart([]);
       setCustomerId("");
       setCustomerName("");
+      setCustomerSearchText("");
       setCustomerAddress("");
       setIsCustomerDialogOpen(false);
       setCurrentTab("history");
@@ -710,19 +735,25 @@ export function Income() {
   }, [user?.id, user?.role]);
 
   useEffect(() => {
-    if (!searchInput.trim()) {
-      setFilteredProducts([]);
+    if (!isProductSearchOpen) {
       return;
     }
 
-    const filtered = products.filter(
+    const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+    if (!searchInput.trim()) {
+      setFilteredProducts(sortedProducts.slice(0, 20));
+      return;
+    }
+
+    const filtered = sortedProducts.filter(
       (product) =>
         product.name.toLowerCase().includes(searchInput.toLowerCase()) ||
         (product.barcode && product.barcode.includes(searchInput))
     );
 
     setFilteredProducts(filtered);
-  }, [products, searchInput]);
+  }, [products, searchInput, isProductSearchOpen]);
 
   useEffect(() => {
     if (cart.length === 0) {
@@ -880,25 +911,66 @@ export function Income() {
                     <Label htmlFor="customer-name" className={darkMode ? 'text-gray-200' : ''}>
                       Empresa Cliente
                     </Label>
-                    <Select
-                      value={customerId}
-                      onValueChange={(value) => {
-                        setCustomerId(value);
-                        const selected = clientOptions.find((client) => client.id === value);
-                        setCustomerName(selected?.nombreEmpresa || "");
-                      }}
-                    >
-                      <SelectTrigger id="customer-name" className={darkMode ? 'bg-gray-600 border-gray-500 text-white mt-2' : 'mt-2'}>
-                        <SelectValue placeholder="Selecciona una empresa" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clientOptions.map((client) => (
-                          <SelectItem key={client.id} value={client.id}>
-                            {client.nombreEmpresa}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="relative mt-2">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                      <Input
+                        id="customer-name"
+                        placeholder="Buscar empresa cliente"
+                        value={customerSearchText}
+                        autoComplete="new-password"
+                        onFocus={() => setIsCustomerSearchOpen(true)}
+                        onBlur={() => setTimeout(() => setIsCustomerSearchOpen(false), 120)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setCustomerSearchText(value);
+                          setCustomerName(value);
+                          setIsCustomerSearchOpen(true);
+
+                          const exactMatch = clientOptions.find(
+                            (client) =>
+                              client.nombreEmpresa.trim().toLowerCase() === value.trim().toLowerCase()
+                          );
+
+                          if (exactMatch) {
+                            setCustomerId(exactMatch.id);
+                            setCustomerAddress(exactMatch.direccion || "");
+                          } else {
+                            setCustomerId("");
+                            setCustomerAddress("");
+                          }
+                        }}
+                        className={`pl-10 ${darkMode ? 'bg-gray-600 border-gray-500 text-white placeholder-gray-400' : ''}`}
+                      />
+
+                      {isCustomerSearchOpen && (
+                        <div
+                          className={`absolute z-30 mt-1 w-full rounded-md border max-h-64 overflow-auto ${
+                            darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          {filterClientsByQuery(customerSearchText).slice(0, 15).map((client) => (
+                            <button
+                              key={`client-search-${client.id}`}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleClientSelection(client)}
+                              className={`w-full text-left px-3 py-2 border-b last:border-b-0 ${
+                                darkMode
+                                  ? 'border-gray-700 hover:bg-gray-700 text-gray-100'
+                                  : 'border-gray-100 hover:bg-gray-50 text-gray-900'
+                              }`}
+                            >
+                              <p className="text-sm font-medium">{client.nombreEmpresa}</p>
+                            </button>
+                          ))}
+                          {filterClientsByQuery(customerSearchText).length === 0 && (
+                            <div className={`px-3 py-2 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                              No hay coincidencias para esta empresa.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -914,12 +986,21 @@ export function Income() {
                     id="search-product"
                     placeholder="Escanea o busca un producto"
                     value={searchInput}
+                    autoComplete="new-password"
+                    onFocus={() => {
+                      setIsProductSearchOpen(true);
+                      if (!searchInput.trim()) {
+                        setFilteredProducts([...products].sort((a, b) => a.name.localeCompare(b.name, "es")).slice(0, 20));
+                      }
+                    }}
+                    onBlur={() => setTimeout(() => setIsProductSearchOpen(false), 120)}
                     onChange={(e) => handleSearchInput(e.target.value)}
                     className={`pl-10 ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}`}
                   />
                 </div>
 
-                {filteredProducts.length > 0 ? (
+                {isProductSearchOpen ? (
+                  filteredProducts.length > 0 ? (
                   <div className={`mt-2 border rounded-lg max-h-72 overflow-y-auto shadow-lg ${
                     darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'
                   }`}>
@@ -957,10 +1038,11 @@ export function Income() {
                       </button>
                     ))}
                   </div>
-                ) : searchInput.trim() ? (
+                  ) : (
                   <div className={`mt-2 p-4 text-center text-sm rounded-lg ${darkMode ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
-                    No se encontraron productos que coincidan
+                    {searchInput.trim() ? "No se encontraron productos que coincidan" : "No hay productos disponibles"}
                   </div>
+                  )
                 ) : null}
               </div>
 
@@ -1082,7 +1164,7 @@ export function Income() {
                               </button>
                             </div>
 
-                            <div className="text-left sm:text-right min-w-[70px] sm:min-w-[80px]">
+                            <div className="text-left sm:text-right">
                               <p className="font-semibold text-green-600">
                                 {formatCurrency(item.price * item.quantity)}
                               </p>
@@ -1264,28 +1346,58 @@ export function Income() {
               <Label htmlFor="edit-customer-name-field" className={darkMode ? 'text-gray-200' : ''}>
                 Nombre del Cliente
               </Label>
-              <Select
-                value={selectedSaleForEdit?.customerName || ""}
-                onValueChange={(value) => {
-                  if (selectedSaleForEdit) {
-                    setSelectedSaleForEdit({
-                      ...selectedSaleForEdit,
-                      customerName: value,
-                    });
-                  }
-                }}
-              >
-                <SelectTrigger id="edit-customer-name-field" className={darkMode ? 'bg-gray-700 border-gray-600 text-white mt-2' : 'mt-2'}>
-                  <SelectValue placeholder="Selecciona un cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clientOptions.map((client) => (
-                    <SelectItem key={client.id} value={client.nombreEmpresa}>
-                      {client.nombreEmpresa}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative mt-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                <Input
+                  id="edit-customer-name-field"
+                  value={selectedSaleForEdit?.customerName || ""}
+                  autoComplete="new-password"
+                  onFocus={() => setIsCustomerDialogSearchOpen(true)}
+                  onBlur={() => setTimeout(() => setIsCustomerDialogSearchOpen(false), 120)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (selectedSaleForEdit) {
+                      setSelectedSaleForEdit({
+                        ...selectedSaleForEdit,
+                        customerName: value,
+                      });
+                    }
+                  }}
+                  placeholder="Busca un cliente"
+                  className={`pl-10 ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}`}
+                />
+
+                {isCustomerDialogSearchOpen && (
+                  <div
+                    className={`absolute z-30 mt-1 w-full rounded-md border max-h-64 overflow-auto ${
+                      darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    {filterClientsByQuery(selectedSaleForEdit?.customerName || "").slice(0, 12).map((client) => (
+                      <button
+                        key={`edit-sale-client-${client.id}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          if (!selectedSaleForEdit) return;
+                          setSelectedSaleForEdit({
+                            ...selectedSaleForEdit,
+                            customerName: client.nombreEmpresa,
+                          });
+                          setIsCustomerDialogSearchOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 border-b last:border-b-0 ${
+                          darkMode
+                            ? 'border-gray-700 hover:bg-gray-700 text-gray-100'
+                            : 'border-gray-100 hover:bg-gray-50 text-gray-900'
+                        }`}
+                      >
+                        <p className="text-sm font-medium">{client.nombreEmpresa}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Current Items */}
@@ -1356,7 +1468,7 @@ export function Income() {
                         </button>
                       </div>
 
-                      <div className="text-left sm:text-right min-w-[70px]">
+                      <div className="text-left sm:text-right">
                         <p className="font-semibold text-green-600 text-sm">
                           {formatCurrency(item.price * item.quantity)}
                         </p>
@@ -1526,18 +1638,66 @@ export function Income() {
               <Label htmlFor="customer-name" className={darkMode ? 'text-gray-200' : ''}>
                 Empresa Cliente
               </Label>
-              <Select value={customerName} onValueChange={setCustomerName}>
-                <SelectTrigger id="customer-name" className={darkMode ? 'bg-gray-700 border-gray-600 text-white mt-2' : 'mt-2'}>
-                  <SelectValue placeholder="Selecciona una empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clientOptions.map((client) => (
-                    <SelectItem key={client.id} value={client.nombreEmpresa}>
-                      {client.nombreEmpresa}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative mt-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                <Input
+                  id="customer-name"
+                  placeholder="Buscar empresa cliente"
+                  value={customerSearchText}
+                  autoComplete="new-password"
+                  onFocus={() => setIsCustomerDialogSearchOpen(true)}
+                  onBlur={() => setTimeout(() => setIsCustomerDialogSearchOpen(false), 120)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCustomerSearchText(value);
+                    setCustomerName(value);
+                    setIsCustomerDialogSearchOpen(true);
+
+                    const exactMatch = clientOptions.find(
+                      (client) =>
+                        client.nombreEmpresa.trim().toLowerCase() === value.trim().toLowerCase()
+                    );
+
+                    if (exactMatch) {
+                      setCustomerId(exactMatch.id);
+                      setCustomerAddress(exactMatch.direccion || "");
+                    } else {
+                      setCustomerId("");
+                      setCustomerAddress("");
+                    }
+                  }}
+                  className={`pl-10 ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}`}
+                />
+
+                {isCustomerDialogSearchOpen && (
+                  <div
+                    className={`absolute z-30 mt-1 w-full rounded-md border max-h-64 overflow-auto ${
+                      darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    {filterClientsByQuery(customerSearchText).slice(0, 15).map((client) => (
+                      <button
+                        key={`dialog-client-search-${client.id}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleClientSelection(client)}
+                        className={`w-full text-left px-3 py-2 border-b last:border-b-0 ${
+                          darkMode
+                            ? 'border-gray-700 hover:bg-gray-700 text-gray-100'
+                            : 'border-gray-100 hover:bg-gray-50 text-gray-900'
+                        }`}
+                      >
+                        <p className="text-sm font-medium">{client.nombreEmpresa}</p>
+                      </button>
+                    ))}
+                    {filterClientsByQuery(customerSearchText).length === 0 && (
+                      <div className={`px-3 py-2 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        No hay coincidencias para esta empresa.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-blue-50'}`}>
               <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -1559,7 +1719,7 @@ export function Income() {
             </Button>
             <Button
               onClick={handleConfirmCompleteSale}
-              disabled={!customerName.trim() || isCompletingSale}
+              disabled={!customerId.trim() || isCompletingSale}
               className="bg-green-600 hover:bg-green-700"
             >
               {isCompletingSale ? "Procesando..." : "Confirmar Venta"}
@@ -1778,7 +1938,7 @@ export function Income() {
                           {formatCurrency(item.price)} × {formatNumber(item.quantity)}
                         </p>
                       </div>
-                      <p className="font-semibold text-green-600 min-w-[70px] text-left sm:text-right">
+                      <p className="font-semibold text-green-600 text-left sm:text-right">
                         {formatCurrency(item.price * item.quantity)}
                       </p>
                     </div>
@@ -1826,18 +1986,49 @@ export function Income() {
               <Label htmlFor="edit-customer-name" className={darkMode ? 'text-gray-200' : ''}>
                 Nombre del Cliente
               </Label>
-              <Select value={editingCustomerName} onValueChange={setEditingCustomerName}>
-                <SelectTrigger id="edit-customer-name" className={darkMode ? 'bg-gray-700 border-gray-600 text-white mt-2' : 'mt-2'}>
-                  <SelectValue placeholder="Selecciona un cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clientOptions.map((client) => (
-                    <SelectItem key={client.id} value={client.nombreEmpresa}>
-                      {client.nombreEmpresa}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative mt-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                <Input
+                  id="edit-customer-name"
+                  placeholder="Busca un cliente"
+                  value={editingCustomerName}
+                  autoComplete="new-password"
+                  onFocus={() => setIsEditCustomerNameSearchOpen(true)}
+                  onBlur={() => setTimeout(() => setIsEditCustomerNameSearchOpen(false), 120)}
+                  onChange={(e) => {
+                    setEditingCustomerName(e.target.value);
+                    setIsEditCustomerNameSearchOpen(true);
+                  }}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 pl-10' : 'pl-10'}
+                />
+
+                {isEditCustomerNameSearchOpen && (
+                  <div
+                    className={`absolute z-30 mt-1 w-full rounded-md border max-h-64 overflow-auto ${
+                      darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    {filterClientsByQuery(editingCustomerName).slice(0, 12).map((client) => (
+                      <button
+                        key={`edit-customer-dialog-${client.id}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setEditingCustomerName(client.nombreEmpresa);
+                          setIsEditCustomerNameSearchOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 border-b last:border-b-0 ${
+                          darkMode
+                            ? 'border-gray-700 hover:bg-gray-700 text-gray-100'
+                            : 'border-gray-100 hover:bg-gray-50 text-gray-900'
+                        }`}
+                      >
+                        <p className="text-sm font-medium">{client.nombreEmpresa}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <Label htmlFor="edit-customer-address" className={darkMode ? 'text-gray-200' : ''}>

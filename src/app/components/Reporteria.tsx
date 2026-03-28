@@ -1026,7 +1026,7 @@ export function Reporteria() {
             <div className="grid grid-cols-1 xl:grid-cols-8 gap-6">
               <div className={primaryFilter === "producto" ? "xl:col-span-8" : "xl:col-span-6"}>
                 <div className={`overflow-x-auto rounded-lg border ${darkMode ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"}`}>
-                  <table className={`min-w-full table-fixed divide-y ${darkMode ? "divide-gray-700 text-gray-200" : "divide-gray-200 text-gray-800"}`}>
+                  <table className={`min-w-[1100px] w-full table-auto divide-y ${darkMode ? "divide-gray-700 text-gray-200" : "divide-gray-200 text-gray-800"}`}>
                     <thead className={darkMode ? "bg-gray-800" : "bg-gray-50"}>
                       <tr>
                         <th className={`w-[18%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>

@@ -200,6 +200,54 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    const normalizedName = String(name || '').trim();
+    const normalizedBarcode = String(barcode || '').trim();
+
+    if (normalizedName) {
+      const duplicatedByName = await query(
+        `SELECT prod_id, prod_nombre, COALESCE(prod_barr, '') AS prod_barr
+         FROM producto
+         WHERE LOWER(TRIM(prod_nombre)) = LOWER(TRIM(?))
+         LIMIT 1`,
+        [normalizedName]
+      );
+
+      if (duplicatedByName.length > 0) {
+        return res.status(409).json({
+          error: 'Ya existe un producto con ese nombre',
+          duplicateBy: 'name',
+          product: {
+            id: Number(duplicatedByName[0].prod_id),
+            name: String(duplicatedByName[0].prod_nombre || ''),
+            barcode: String(duplicatedByName[0].prod_barr || ''),
+          },
+        });
+      }
+    }
+
+    if (normalizedBarcode) {
+      const duplicatedByBarcode = await query(
+        `SELECT prod_id, prod_nombre, COALESCE(prod_barr, '') AS prod_barr
+         FROM producto
+         WHERE TRIM(COALESCE(prod_barr, '')) <> ''
+           AND LOWER(TRIM(prod_barr)) = LOWER(TRIM(?))
+         LIMIT 1`,
+        [normalizedBarcode]
+      );
+
+      if (duplicatedByBarcode.length > 0) {
+        return res.status(409).json({
+          error: 'Ya existe un producto con ese código de barras',
+          duplicateBy: 'barcode',
+          product: {
+            id: Number(duplicatedByBarcode[0].prod_id),
+            name: String(duplicatedByBarcode[0].prod_nombre || ''),
+            barcode: String(duplicatedByBarcode[0].prod_barr || ''),
+          },
+        });
+      }
+    }
+
     const activeEstadoId = await getActiveEstadoProductoId();
     const normalizedCategory = categoria || description || 'General';
     const normalizedObservations = observations || '';
@@ -266,6 +314,57 @@ router.put('/:id', async (req, res) => {
     const nextBarcode = typeof barcode === 'undefined' ? current.prod_barr : barcode;
     const nextCategory = categoria || description || current.prod_categoria || 'GENERAL';
     const nextObservations = typeof observations === 'undefined' ? current.prod_descrip || '' : observations;
+
+    const currentProductId = Number(req.params.id);
+    const normalizedNextName = String(nextName || '').trim();
+    const normalizedNextBarcode = String(nextBarcode || '').trim();
+
+    if (normalizedNextName) {
+      const duplicatedByName = await query(
+        `SELECT prod_id, prod_nombre, COALESCE(prod_barr, '') AS prod_barr
+         FROM producto
+         WHERE LOWER(TRIM(prod_nombre)) = LOWER(TRIM(?))
+           AND prod_id <> ?
+         LIMIT 1`,
+        [normalizedNextName, currentProductId]
+      );
+
+      if (duplicatedByName.length > 0) {
+        return res.status(409).json({
+          error: 'Ya existe un producto con ese nombre',
+          duplicateBy: 'name',
+          product: {
+            id: Number(duplicatedByName[0].prod_id),
+            name: String(duplicatedByName[0].prod_nombre || ''),
+            barcode: String(duplicatedByName[0].prod_barr || ''),
+          },
+        });
+      }
+    }
+
+    if (normalizedNextBarcode) {
+      const duplicatedByBarcode = await query(
+        `SELECT prod_id, prod_nombre, COALESCE(prod_barr, '') AS prod_barr
+         FROM producto
+         WHERE TRIM(COALESCE(prod_barr, '')) <> ''
+           AND LOWER(TRIM(prod_barr)) = LOWER(TRIM(?))
+           AND prod_id <> ?
+         LIMIT 1`,
+        [normalizedNextBarcode, currentProductId]
+      );
+
+      if (duplicatedByBarcode.length > 0) {
+        return res.status(409).json({
+          error: 'Ya existe un producto con ese código de barras',
+          duplicateBy: 'barcode',
+          product: {
+            id: Number(duplicatedByBarcode[0].prod_id),
+            name: String(duplicatedByBarcode[0].prod_nombre || ''),
+            barcode: String(duplicatedByBarcode[0].prod_barr || ''),
+          },
+        });
+      }
+    }
 
     const activeEstadoId = await getActiveEstadoProductoId();
     await query(

@@ -299,7 +299,7 @@ export function Orders() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-2 pt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
           <div className={`p-2 rounded ${darkMode ? "bg-gray-700" : "bg-gray-50"}`}>
             <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-600"}`}>Cant. Productos</p>
             <p className={`font-bold ${darkMode ? "text-white" : ""}`}>{formatNumber(order.items_qty)}</p>
