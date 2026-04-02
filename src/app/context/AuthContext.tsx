@@ -21,8 +21,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    // Check if user was previously logged in
-    return localStorage.getItem("isAuthenticated") === "true";
+    const token = localStorage.getItem("authToken");
+    return localStorage.getItem("isAuthenticated") === "true" && !!token;
   });
   const [user, setUser] = useState<AuthUser | null>(() => {
     const savedUser = localStorage.getItem("user");
@@ -79,10 +79,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : [],
       };
 
+      const token = String(payload?.token || "").trim();
+      if (!token) {
+        return {
+          success: false,
+          message: "No se recibió token de autenticación",
+        };
+      }
+
       setIsAuthenticated(true);
       setUser(userData);
       localStorage.setItem("isAuthenticated", "true");
       localStorage.setItem("user", JSON.stringify(userData));
+      localStorage.setItem("authToken", token);
 
       return { success: true };
     } catch {
@@ -98,10 +107,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      logout();
+      return;
+    }
+
     try {
       const response = await fetch("/api/auth/me", {
         headers: {
-          "x-user-id": String(user.id),
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -142,6 +157,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore transient errors while keeping session active
     }
   };
+
+  useEffect(() => {
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        return originalFetch(input, init);
+      }
+
+      const rawUrl = typeof input === "string" || input instanceof URL ? String(input) : String(input.url || "");
+      const targetUrl = new URL(rawUrl, window.location.origin);
+      const shouldAttachToken =
+        targetUrl.origin === window.location.origin && targetUrl.pathname.startsWith("/api/");
+
+      if (!shouldAttachToken) {
+        return originalFetch(input, init);
+      }
+
+      const requestHeaders =
+        typeof input === "object" && input instanceof Request ? input.headers : undefined;
+      const headers = new Headers(init?.headers || requestHeaders);
+      if (!headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+
+      return originalFetch(input, {
+        ...init,
+        headers,
+      });
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !user?.id) {
@@ -222,6 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     localStorage.removeItem("isAuthenticated");
     localStorage.removeItem("user");
+    localStorage.removeItem("authToken");
   };
 
   return (

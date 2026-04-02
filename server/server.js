@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import http from 'http';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import {
   ensureLoginHistoryTable,
   ensureOrderActionsHistoryTable,
@@ -17,19 +19,25 @@ import ordersRoutes from './routes/orders.js';
 import clientsRoutes from './routes/clients.js';
 import shippingProvidersRoutes from './routes/shippingProviders.js';
 import { attachRealtime } from './realtime.js';
+import { attachAuthContext } from './middleware/auth.js';
+import { startAdminAndJefeOverdueScheduler } from './services/alertEmailService.js';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 
 attachRealtime(server);
+startAdminAndJefeOverdueScheduler();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/api', attachAuthContext);
 
 // Verificar conexión a BD al iniciar
 (async () => {

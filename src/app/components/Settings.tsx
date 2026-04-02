@@ -73,6 +73,10 @@ export function Settings() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactError, setContactError] = useState("");
 
   useEffect(() => {
     localStorage.setItem(STORE_SETTINGS_KEY, JSON.stringify(storeInfo));
@@ -90,6 +94,25 @@ export function Settings() {
     };
 
     syncGlobalReminder();
+  }, []);
+
+  useEffect(() => {
+    const loadMyContactData = async () => {
+      try {
+        const response = await fetch("/api/auth/me/contact");
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        setContactEmail(String(payload?.correo || ""));
+        setContactPhone(String(payload?.telefono || ""));
+      } catch {
+        // Ignore transient fetch errors
+      }
+    };
+
+    loadMyContactData();
   }, []);
 
   const handleSave = async () => {
@@ -166,6 +189,44 @@ export function Settings() {
       setConfirmPassword("");
     } catch (err) {
       setPasswordError(err instanceof Error ? err.message : "No se pudo actualizar la contraseña");
+    }
+  };
+
+  const handleContactSave = async () => {
+    setContactError("");
+    setContactMessage("");
+
+    const normalizedEmail = contactEmail.trim();
+    const normalizedPhone = contactPhone.trim();
+
+    if (!normalizedEmail) {
+      setContactError("El correo es requerido");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/auth/me/contact", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          correo: normalizedEmail,
+          telefono: normalizedPhone,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "No se pudo actualizar la información de contacto");
+      }
+
+      setContactEmail(String(payload?.correo || normalizedEmail));
+      setContactPhone(String(payload?.telefono || normalizedPhone));
+      setContactMessage("Información de contacto actualizada correctamente");
+      addAlert("✓ Información de contacto actualizada correctamente", "success");
+    } catch (err) {
+      setContactError(err instanceof Error ? err.message : "No se pudo actualizar la información de contacto");
     }
   };
 
@@ -257,6 +318,47 @@ export function Settings() {
             <CardTitle className={darkMode ? 'text-white' : ''}>Cambiar Contraseña</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="contact-email" className={darkMode ? 'text-gray-200' : ''}>Correo Electrónico</Label>
+              <Input
+                id="contact-email"
+                type="email"
+                value={contactEmail}
+                onChange={(e) => {
+                  setContactEmail(e.target.value);
+                  setContactError("");
+                  setContactMessage("");
+                }}
+                placeholder="usuario@correo.com"
+                className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+              />
+            </div>
+            <div>
+              <Label htmlFor="contact-phone" className={darkMode ? 'text-gray-200' : ''}>Teléfono</Label>
+              <Input
+                id="contact-phone"
+                type="tel"
+                value={contactPhone}
+                onChange={(e) => {
+                  setContactPhone(e.target.value);
+                  setContactError("");
+                  setContactMessage("");
+                }}
+                placeholder="5555-5555"
+                className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+              />
+            </div>
+
+            {!!contactError && <p className="text-sm text-red-600">{contactError}</p>}
+            {!!contactMessage && <p className="text-sm text-green-600">{contactMessage}</p>}
+
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={handleContactSave}>Actualizar Correo y Teléfono</Button>
+            </div>
+
+            <div className="border-t pt-4" style={{ borderColor: darkMode ? '#4b5563' : '#e5e7eb' }}>
+              <p className={`text-sm font-medium mb-3 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Cambio de Contraseña</p>
+            </div>
             <div>
               <Label htmlFor="current-password" className={darkMode ? 'text-gray-200' : ''}>Contraseña Actual</Label>
               <Input

@@ -1,6 +1,10 @@
 import express from 'express';
-import nodemailer from 'nodemailer';
+import { randomInt } from 'crypto';
+import bcrypt from 'bcryptjs';
+import { Resend } from 'resend';
 import { query } from '../db.js';
+import { createAccessToken, requireAuth } from '../middleware/auth.js';
+import { maskEmailForPrivacy } from '../services/alertEmailService.js';
 
 const router = express.Router();
 
@@ -13,72 +17,55 @@ const MIN_REMINDER_DAYS = 1;
 const MAX_REMINDER_DAYS = 365;
 const MIN_LOW_STOCK_THRESHOLD = 1;
 const MAX_LOW_STOCK_THRESHOLD = 999;
+const BCRYPT_SALT_ROUNDS = Math.max(10, Math.min(14, Number(process.env.BCRYPT_SALT_ROUNDS || 12)));
 
-let transporter;
-let transporterInfo;
+let resendClient;
 
-async function getEmailTransporter() {
-  if (transporter) {
-    return { transporter, info: transporterInfo };
+function isPasswordHash(value) {
+  return /^\$2[aby]\$\d{2}\$/.test(String(value || ''));
+}
+
+async function hashPassword(plainPassword) {
+  return bcrypt.hash(String(plainPassword || ''), BCRYPT_SALT_ROUNDS);
+}
+
+async function verifyPassword(plainPassword, storedPassword) {
+  const normalizedStored = String(storedPassword || '');
+  if (!normalizedStored) {
+    return false;
   }
 
-  const host = String(process.env.SMTP_HOST || '').trim();
-  const rawPort = String(process.env.SMTP_PORT || '587').trim();
-  const port = Number(rawPort);
-  const user = String(process.env.SMTP_USER || '').trim();
-  const pass = String(process.env.SMTP_PASS || '').trim();
-  const secure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
-  const nodeEnv = String(process.env.NODE_ENV || 'development').toLowerCase();
-
-  const missingVars = [];
-  if (!host) missingVars.push('SMTP_HOST');
-  if (!rawPort || Number.isNaN(port) || port <= 0) missingVars.push('SMTP_PORT');
-  if (!user) missingVars.push('SMTP_USER');
-  if (!pass) missingVars.push('SMTP_PASS');
-
-  if (missingVars.length > 0) {
-    if (nodeEnv !== 'production') {
-      // In development, fallback to Ethereal test SMTP so password recovery works without real credentials.
-      const testAccount = await nodemailer.createTestAccount();
-      transporter = nodemailer.createTransport({
-        host: testAccount.smtp.host,
-        port: testAccount.smtp.port,
-        secure: testAccount.smtp.secure,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
-        },
-      });
-
-      transporterInfo = {
-        mode: 'ethereal',
-        defaultFrom: `Sistema de Gestion <${testAccount.user}>`,
-      };
-
-      return { transporter, info: transporterInfo };
-    }
-
-    throw new Error(
-      `Configuracion SMTP incompleta. Define: ${missingVars.join(', ')} en server/.env`
-    );
+  if (isPasswordHash(normalizedStored)) {
+    return bcrypt.compare(String(plainPassword || ''), normalizedStored);
   }
 
-  transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user,
-      pass,
-    },
-  });
+  return String(plainPassword || '') === normalizedStored;
+}
 
-  transporterInfo = {
-    mode: 'smtp',
-    defaultFrom: user,
-  };
+function generateTemporaryPassword(length = 10) {
+  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let output = '';
 
-  return { transporter, info: transporterInfo };
+  for (let index = 0; index < length; index += 1) {
+    const charIndex = randomInt(0, charset.length);
+    output += charset[charIndex];
+  }
+
+  return output;
+}
+
+function getResendClient() {
+  if (resendClient) {
+    return resendClient;
+  }
+
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  if (!apiKey) {
+    throw new Error('Configuracion incompleta. Define RESEND_API_KEY en server/.env');
+  }
+
+  resendClient = new Resend(apiKey);
+  return resendClient;
 }
 
 async function getRoleIdByName(roleName) {
@@ -550,6 +537,17 @@ function getClientIp(req) {
   return req.ip || req.socket?.remoteAddress || null;
 }
 
+router.use((req, res, next) => {
+  const isLoginRoute = req.method === 'POST' && req.path === '/login';
+  const isForgotPasswordRoute = req.method === 'POST' && req.path === '/forgot-password';
+
+  if (isLoginRoute || isForgotPasswordRoute) {
+    return next();
+  }
+
+  return requireAuth(req, res, next);
+});
+
 router.get('/roles', async (req, res) => {
   try {
     const roles = await query(
@@ -938,6 +936,7 @@ router.post('/login', async (req, res) => {
       `SELECT
         u.usr_id AS id,
         u.usr_nit AS username,
+        u.usr_pass AS stored_password,
         TRIM(CONCAT(COALESCE(u.usr_nombre, ''), ' ', COALESCE(u.usr_apellido, ''))) AS display_name,
         COALESCE(r.rl_id, 0) AS role_id,
         COALESCE(r.rl_nombre, 'vendedor') AS role,
@@ -946,9 +945,9 @@ router.post('/login', async (req, res) => {
       FROM usuario u
       LEFT JOIN rol r ON r.rl_id = u.rl_id
       LEFT JOIN estado_usr eu ON eu.est_id = u.est_id
-      WHERE u.usr_nit = ? AND u.usr_pass = ?
+      WHERE u.usr_nit = ?
       LIMIT 1`,
-      [normalizedUsername, password]
+      [normalizedUsername]
     );
 
     if (users.length === 0) {
@@ -956,6 +955,16 @@ router.post('/login', async (req, res) => {
     }
 
     const user = users[0];
+    const passwordOk = await verifyPassword(password, user.stored_password);
+    if (!passwordOk) {
+      return res.status(401).json({ error: 'Credenciales incorrectas' });
+    }
+
+    if (!isPasswordHash(user.stored_password)) {
+      const migratedHash = await hashPassword(password);
+      await query('UPDATE usuario SET usr_pass = ? WHERE usr_id = ?', [migratedHash, Number(user.id)]);
+    }
+
     if (String(user.estado || '').toLowerCase() === 'inactivo') {
       return res.status(403).json({ error: 'Usuario inactivo' });
     }
@@ -974,6 +983,11 @@ router.post('/login', async (req, res) => {
     );
 
     const allowedPaths = await loadAllowedScreenPathsByUserId(Number(user.id));
+    const token = createAccessToken({
+      sub: Number(user.id),
+      username: String(user.username || normalizedUsername),
+      role: String(user.role || 'vendedor'),
+    });
 
     return res.json({
       id: Number(user.id),
@@ -982,6 +996,8 @@ router.post('/login', async (req, res) => {
       roleId: Number(user.role_id || 0),
       role: String(user.role || 'vendedor'),
       allowedPaths,
+      token,
+      tokenType: 'Bearer',
     });
   } catch (error) {
     return res.status(500).json({ error: error.message });
@@ -1051,9 +1067,10 @@ router.post('/forgot-password', async (req, res) => {
   try {
     const users = await query(
       `SELECT
+        usr_id AS id,
         usr_nit AS nit,
         usr_correo AS correo,
-        usr_pass AS password,
+        usr_pass AS current_password,
         TRIM(CONCAT(COALESCE(usr_nombre, ''), ' ', COALESCE(usr_apellido, ''))) AS nombre
       FROM usuario
       WHERE UPPER(COALESCE(usr_nit, '')) = ?
@@ -1067,33 +1084,44 @@ router.post('/forgot-password', async (req, res) => {
 
     const user = users[0];
     const userEmail = String(user.correo || '').trim();
-    const userPassword = String(user.password || '').trim();
     const userName = String(user.nombre || normalizedNit).trim();
+    const previousPasswordHash = String(user.current_password || '');
+    const temporaryPassword = generateTemporaryPassword();
+    const temporaryPasswordHash = await hashPassword(temporaryPassword);
 
     if (!userEmail) {
       return res.status(400).json({ error: 'El usuario no tiene correo registrado en la base de datos' });
     }
 
-    const { transporter: smtpTransporter, info } = await getEmailTransporter();
-    const fromEmail = String(process.env.SMTP_FROM || process.env.SMTP_USER || info?.defaultFrom || '').trim();
+    await query('UPDATE usuario SET usr_pass = ? WHERE usr_id = ?', [temporaryPasswordHash, Number(user.id)]);
 
-    const mailInfo = await smtpTransporter.sendMail({
-      from: fromEmail,
-      to: userEmail,
-      subject: 'Recuperacion de acceso - Sistema de Gestion',
-      text: `Hola ${userName},\n\nRecibimos una solicitud de recuperacion para el usuario con NIT ${normalizedNit}.\n\nTu contrasena actual es: ${userPassword}\n\nSi no solicitaste este correo, ignora este mensaje.`,
-      html: `<p>Hola <strong>${userName}</strong>,</p><p>Recibimos una solicitud de recuperacion para el usuario con NIT <strong>${normalizedNit}</strong>.</p><p>Tu contrasena actual es: <strong>${userPassword}</strong></p><p>Si no solicitaste este correo, ignora este mensaje.</p>`,
-    });
+    const resend = getResendClient();
+    const fromEmail = String(process.env.RESEND_FROM || '').trim();
+    if (!fromEmail) {
+      throw new Error('Configuracion incompleta. Define RESEND_FROM en server/.env');
+    }
 
-    const previewUrl = nodemailer.getTestMessageUrl(mailInfo);
+    try {
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: userEmail,
+        subject: 'Recuperacion de acceso - Sistema de Gestion',
+        text: `Hola ${userName},\n\nRecibimos una solicitud de recuperacion para el usuario con NIT ${normalizedNit}.\n\nTu contrasena temporal es: ${temporaryPassword}\n\nPor seguridad, ingresa al sistema y cambiala de inmediato en Configuracion.\n\nSi no solicitaste este correo, ignora este mensaje.`,
+        html: `<p>Hola <strong>${userName}</strong>,</p><p>Recibimos una solicitud de recuperacion para el usuario con NIT <strong>${normalizedNit}</strong>.</p><p>Tu contrasena temporal es: <strong>${temporaryPassword}</strong></p><p><strong>Por seguridad, cambiala de inmediato en Configuracion</strong>.</p><p>Si no solicitaste este correo, ignora este mensaje.</p>`,
+      });
+
+      if (sendResult?.error) {
+        throw new Error(String(sendResult.error.message || 'No se pudo enviar correo con Resend'));
+      }
+    } catch (sendError) {
+      await query('UPDATE usuario SET usr_pass = ? WHERE usr_id = ?', [previousPasswordHash, Number(user.id)]);
+      throw sendError;
+    }
 
     return res.json({
       success: true,
-      message:
-        info?.mode === 'ethereal'
-          ? `Correo de prueba generado para ${userEmail}. Revisa previewUrl para ver el mensaje.`
-          : `Se envio un correo a ${userEmail} con la contrasena registrada`,
-      previewUrl: previewUrl || null,
+      message: `Se envio un correo a ${maskEmailForPrivacy(userEmail)} con una contraseña temporal`,
+      provider: 'resend',
     });
   } catch (error) {
     return res.status(500).json({ error: error.message });
@@ -1123,12 +1151,100 @@ router.put('/me/password', async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    if (String(users[0].usr_pass || '') !== currentPassword) {
+    const validCurrentPassword = await verifyPassword(currentPassword, String(users[0].usr_pass || ''));
+    if (!validCurrentPassword) {
       return res.status(401).json({ error: 'La contraseña actual es incorrecta' });
     }
 
-    await query('UPDATE usuario SET usr_pass = ? WHERE usr_id = ?', [newPassword, requesterId]);
+    const newPasswordHash = await hashPassword(newPassword);
+    await query('UPDATE usuario SET usr_pass = ? WHERE usr_id = ?', [newPasswordHash, requesterId]);
     return res.json({ success: true, message: 'Contraseña actualizada correctamente' });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/me/contact', async (req, res) => {
+  const requesterId = Number(req.headers['x-user-id'] || req.query?.userId || 0);
+
+  if (!requesterId) {
+    return res.status(401).json({ error: 'Usuario no autenticado' });
+  }
+
+  try {
+    const users = await query(
+      `SELECT
+        usr_id AS id,
+        COALESCE(usr_correo, '') AS correo,
+        COALESCE(usr_telefono, '') AS telefono
+       FROM usuario
+       WHERE usr_id = ?
+       LIMIT 1`,
+      [requesterId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    return res.json({
+      id: Number(users[0].id || requesterId),
+      correo: String(users[0].correo || ''),
+      telefono: String(users[0].telefono || ''),
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/me/contact', async (req, res) => {
+  const requesterId = Number(req.headers['x-user-id'] || req.body?.userId || 0);
+  const correoRaw = String(req.body?.correo || '').trim();
+  const telefonoRaw = String(req.body?.telefono || '').trim();
+
+  if (!requesterId) {
+    return res.status(401).json({ error: 'Usuario no autenticado' });
+  }
+
+  if (!correoRaw) {
+    return res.status(400).json({ error: 'El correo es requerido' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(correoRaw)) {
+    return res.status(400).json({ error: 'El correo no tiene un formato válido' });
+  }
+
+  try {
+    const existingUsers = await query('SELECT usr_id FROM usuario WHERE usr_id = ? LIMIT 1', [requesterId]);
+    if (existingUsers.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const duplicatedEmail = await query(
+      `SELECT usr_id
+       FROM usuario
+       WHERE LOWER(TRIM(COALESCE(usr_correo, ''))) = LOWER(TRIM(?))
+         AND usr_id <> ?
+       LIMIT 1`,
+      [correoRaw, requesterId]
+    );
+
+    if (duplicatedEmail.length > 0) {
+      return res.status(409).json({ error: 'Ese correo ya está registrado por otro usuario' });
+    }
+
+    await query(
+      'UPDATE usuario SET usr_correo = ?, usr_telefono = ? WHERE usr_id = ?',
+      [correoRaw, telefonoRaw || null, requesterId]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Información de contacto actualizada correctamente',
+      correo: correoRaw,
+      telefono: telefonoRaw,
+    });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -1186,9 +1302,11 @@ router.post('/users', async (req, res) => {
       return res.status(403).json({ error: 'Solo un administrador puede crear usuarios administradores' });
     }
 
+    const passwordHash = await hashPassword(password);
+
     await query(
       'INSERT INTO usuario (usr_nombre, usr_apellido, usr_correo, usr_telefono, usr_nit, usr_pass, rl_id, est_id, usr_id_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [String(nombres).toUpperCase(), String(apellidos).toUpperCase(), correo, telefono || null, String(usuario || '').toUpperCase(), password, roleId, estadoId, creatorId]
+      [String(nombres).toUpperCase(), String(apellidos).toUpperCase(), correo, telefono || null, String(usuario || '').toUpperCase(), passwordHash, roleId, estadoId, creatorId]
     );
 
     const created = await query('SELECT LAST_INSERT_ID() AS id');
@@ -1289,8 +1407,9 @@ router.put('/users/:id', async (req, res) => {
     }
 
     if (typeof password !== 'undefined' && password !== '') {
+      const passwordHash = await hashPassword(password);
       setClauses.push('usr_pass = ?');
-      params.push(password);
+      params.push(passwordHash);
     }
 
     if (typeof rol !== 'undefined' && rol !== '') {

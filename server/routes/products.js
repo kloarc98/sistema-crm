@@ -1,7 +1,22 @@
 import express from 'express';
 import { query } from '../db.js';
+import { notifyNoStockToAdminAndJefe } from '../services/alertEmailService.js';
 
 const router = express.Router();
+
+async function notifyNoStockFromProductMutation({ productId, productName, previousStock, newStock, source }) {
+  try {
+    await notifyNoStockToAdminAndJefe({
+      productId,
+      productName,
+      previousStock,
+      newStock,
+      source,
+    });
+  } catch (error) {
+    console.error('Error enviando alerta de producto sin stock:', error.message);
+  }
+}
 
 function getRequesterUserId(req) {
   const candidate = req.headers['x-user-id'] ?? req.body?.usr_modif ?? null;
@@ -322,6 +337,14 @@ router.post('/', async (req, res) => {
     const created = await query('SELECT LAST_INSERT_ID() AS id');
     const createdId = Number(created[0].id);
 
+    await notifyNoStockFromProductMutation({
+      productId: createdId,
+      productName: String(name || ''),
+      previousStock: null,
+      newStock: Number(typeof stock === 'undefined' ? 0 : stock),
+      source: 'creacion_producto',
+    });
+
     res.status(201).json({
       id: createdId,
       name,
@@ -469,6 +492,14 @@ router.put('/:id', async (req, res) => {
       newStock: Number(nextStock || 0),
       previousPrice: Number(current.prod_precio || 0),
       newPrice: Number(nextPrice || 0),
+    });
+
+    await notifyNoStockFromProductMutation({
+      productId: Number(req.params.id),
+      productName: String(nextName || ''),
+      previousStock: Number(current.prod_stock || 0),
+      newStock: Number(nextStock || 0),
+      source: 'actualizacion_producto',
     });
 
     res.json({ message: 'Producto actualizado' });

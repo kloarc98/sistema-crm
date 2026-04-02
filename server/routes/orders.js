@@ -7,8 +7,32 @@ import {
   emitOrderUpdated,
   emitStockChanged,
 } from '../realtime.js';
+import {
+  notifyNoStockToAdminAndJefe,
+  notifyOverdueOrdersToAdminAndJefe,
+} from '../services/alertEmailService.js';
 
 const router = express.Router();
+
+async function triggerStockAndOverdueEmailAlerts(changes = []) {
+  try {
+    if (Array.isArray(changes) && changes.length > 0) {
+      for (const change of changes) {
+        await notifyNoStockToAdminAndJefe({
+          productId: Number(change.productId || 0),
+          productName: `Producto #${Number(change.productId || 0)}`,
+          previousStock: Number(change.previousStock || 0),
+          newStock: Number(change.newStock || 0),
+          source: 'pedido',
+        });
+      }
+    }
+
+    await notifyOverdueOrdersToAdminAndJefe();
+  } catch (error) {
+    console.error('Error enviando alertas por correo (pedidos):', error.message);
+  }
+}
 
 async function tableExists(tableName) {
   const rows = await query(
@@ -821,16 +845,20 @@ router.post('/', async (req, res) => {
       })
     );
 
-    if (stockChanges.size > 0) {
+    const emittedStockChanges = Array.from(stockChanges.values());
+
+    if (emittedStockChanges.length > 0) {
       emitStockChanged(
         buildStockEventPayload({
           orderId: generatedPedidoId,
           action: 'created',
           actorUserId: Number(usr_modif || user_id),
-          changes: Array.from(stockChanges.values()),
+          changes: emittedStockChanges,
         })
       );
     }
+
+    await triggerStockAndOverdueEmailAlerts(emittedStockChanges);
 
     res.status(201).json({
       id: generatedPedidoId,
@@ -1122,16 +1150,20 @@ router.put('/:id', async (req, res) => {
       })
     );
 
-    if (stockChanges.size > 0) {
+    const emittedStockChanges = Array.from(stockChanges.values());
+
+    if (emittedStockChanges.length > 0) {
       emitStockChanged(
         buildStockEventPayload({
           orderId,
           action: 'updated',
           actorUserId: Number(usr_modif || currentOrder.usr_id || 0) || null,
-          changes: Array.from(stockChanges.values()),
+          changes: emittedStockChanges,
         })
       );
     }
+
+    await triggerStockAndOverdueEmailAlerts(emittedStockChanges);
 
     res.json({ message: 'Orden actualizada' });
   } catch (error) {
@@ -1231,16 +1263,20 @@ router.put('/:id/cancel', async (req, res) => {
       })
     );
 
-    if (stockChanges.size > 0) {
+    const emittedStockChanges = Array.from(stockChanges.values());
+
+    if (emittedStockChanges.length > 0) {
       emitStockChanged(
         buildStockEventPayload({
           orderId,
           action: 'cancelled',
           actorUserId: modifierId,
-          changes: Array.from(stockChanges.values()),
+          changes: emittedStockChanges,
         })
       );
     }
+
+    await triggerStockAndOverdueEmailAlerts(emittedStockChanges);
 
     res.json({ message: 'Pedido cancelado y stock restaurado', phase: cancelledEstadoId, status: 'cancelado' });
   } catch (error) {
