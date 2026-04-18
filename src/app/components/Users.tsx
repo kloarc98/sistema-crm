@@ -117,6 +117,7 @@ export function Users() {
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [selectedUserLoginHistory, setSelectedUserLoginHistory] = useState<LoginHistoryRecord[]>([]);
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
+  const [maxTotalUsers, setMaxTotalUsers] = useState<number | null>(null);
   const isCoverageEnabledForForm = isCoverageRoleEligible(form.rol);
   const selectableRoles = useMemo(
     () => roles.filter((roleName) => isAdmin || !isAdminRoleName(roleName)),
@@ -127,9 +128,16 @@ export function Users() {
     setIsLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/auth/users");
+      const response = await fetch("/api/auth/users", {
+        headers: {
+          "x-user-id": String(user?.id || ""),
+          "x-user-role": String(user?.role || ""),
+        },
+      });
       if (!response.ok) {
-        throw new Error("No se pudieron cargar los usuarios");
+        const payload = await response.json().catch(() => ({}));
+        const backendError = String(payload?.error || "").trim();
+        throw new Error(backendError || "No se pudieron cargar los usuarios");
       }
       const data = await response.json();
       setUsers(Array.isArray(data) ? data : []);
@@ -172,6 +180,28 @@ export function Users() {
       setDepartments(Array.isArray(data) ? data : []);
     } catch {
       setDepartments([]);
+    }
+  };
+
+  const fetchMaxTotalUsers = async () => {
+    try {
+      const response = await fetch("/api/auth/settings/max-total-users", {
+        headers: {
+          "x-user-id": String(user?.id || ""),
+          "x-user-role": String(user?.role || ""),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("No se pudo cargar el límite de usuarios");
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      const value = payload?.maxTotalUsers;
+      const normalized = value === null || typeof value === "undefined" || value === "" ? null : Number(value);
+      setMaxTotalUsers(Number.isFinite(normalized as number) ? (normalized as number) : null);
+    } catch {
+      setMaxTotalUsers(null);
     }
   };
 
@@ -340,7 +370,8 @@ export function Users() {
     fetchUsers();
     fetchRoles();
     fetchDepartments();
-  }, []);
+    fetchMaxTotalUsers();
+  }, [user?.id, user?.role]);
 
   const [usersPage, setUsersPage] = useState(1);
   useEffect(() => { setUsersPage(1); }, [search, statusFilter]);
@@ -349,6 +380,10 @@ export function Users() {
     const query = search.toLowerCase().trim();
 
     return users.filter((user) => {
+      if (!isAdmin && isAdminRoleName(user.rol)) {
+        return false;
+      }
+
       const userStatus = (user.estado || "activo").toLowerCase() === "inactivo" ? "inactivo" : "activo";
       const matchesStatus =
         statusFilter === "todos" ||
@@ -368,7 +403,7 @@ export function Users() {
         .toLowerCase()
         .includes(query);
     });
-  }, [users, search, statusFilter]);
+  }, [users, search, statusFilter, isAdmin]);
 
   const usersTotalPages = Math.max(1, Math.ceil(filteredUsers.length / 10));
   const paginatedUsers = useMemo(() => filteredUsers.slice((usersPage - 1) * 10, usersPage * 10), [filteredUsers, usersPage]);
@@ -416,11 +451,19 @@ export function Users() {
       if (editingUserId) {
         const response = await fetch(`/api/auth/users/${editingUserId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": String(user?.id || ""),
+            "x-user-role": String(user?.role || ""),
+          },
           body: JSON.stringify({ ...form, coverageAssignments }),
         });
 
         if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          if (response.status === 403) {
+            throw new Error(String(payload?.error || "No tienes permisos para actualizar este usuario"));
+          }
           throw new Error("No se pudo actualizar el usuario");
         }
         addAlert("✓ Usuario actualizado correctamente", "success");
@@ -442,6 +485,13 @@ export function Users() {
         });
 
         if (!response.ok) {
+          const errorPayload = await response.json().catch(() => ({}));
+          const backendError = String(errorPayload?.error || "").toLowerCase();
+
+          if (response.status === 409 && backendError.includes("limite") && backendError.includes("usuario")) {
+            throw new Error("No se pudo crear el usuario, llego al limite");
+          }
+
           throw new Error("No se pudo crear el usuario");
         }
         addAlert("✓ Usuario creado correctamente", "success");
@@ -457,6 +507,10 @@ export function Users() {
   };
 
   const handleEdit = async (user: UserRecord) => {
+    if (!isAdmin && isAdminRoleName(user.rol)) {
+      return;
+    }
+
     setError("");
     setIsCoverageLoading(true);
 
@@ -493,6 +547,11 @@ export function Users() {
   };
 
   const handleViewDetails = async (userId: string) => {
+    const selected = users.find((row) => row.id === userId);
+    if (!isAdmin && selected && isAdminRoleName(selected.rol)) {
+      return;
+    }
+
     setIsDetailsLoading(true);
     setError("");
     setSelectedUserLoginHistory([]);
@@ -669,16 +728,18 @@ export function Users() {
                 </Select>
               </div>
 
-              <div>
-                <Label className={darkMode ? "text-gray-200" : ""}>Contraseña</Label>
-                <Input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-                  placeholder={editingUserId ? "Dejar vacío para no cambiar" : "Ingresa contraseña"}
-                  className={darkMode ? "bg-gray-700 border-gray-600 text-white" : ""}
-                />
-              </div>
+              {(!editingUserId || isAdmin) && (
+                <div>
+                  <Label className={darkMode ? "text-gray-200" : ""}>Contraseña</Label>
+                  <Input
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                    placeholder={editingUserId ? "Dejar vacío para no cambiar" : "Ingresa contraseña"}
+                    className={darkMode ? "bg-gray-700 border-gray-600 text-white" : ""}
+                  />
+                </div>
+              )}
 
               <div className={`rounded-md border p-3 space-y-2 ${darkMode ? "border-gray-600 bg-gray-700/30" : "border-gray-200 bg-gray-50"}`}>
                 <p className={`text-sm font-semibold ${darkMode ? "text-gray-100" : "text-gray-800"}`}>
@@ -726,7 +787,7 @@ export function Users() {
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <CardTitle className={`flex items-center gap-2 ${darkMode ? "text-white" : ""}`}>
                   <UsersIcon className="size-5 text-blue-600" />
-                  Lista de Usuarios ({filteredUsers.length})
+                  Lista de Usuarios ({filteredUsers.length}/{maxTotalUsers === null ? "∞" : maxTotalUsers})
                 </CardTitle>
                 <Input
                   placeholder="Buscar usuario..."

@@ -5,6 +5,7 @@ export interface Product {
   id: string;
   name: string;
   price: number;
+  precioPremium?: number | null;
   purchasePrice?: number;
   stock: number;
   category: string;
@@ -114,6 +115,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     id: String(product.id),
     name: product.name,
     price: Number(product.price) || 0,
+    precioPremium:
+      product.precioPremium === null || product.precioPremium === undefined
+        ? null
+        : Number(product.precioPremium),
     purchasePrice:
       typeof product.purchasePrice === "number" || typeof product.purchasePrice === "string"
         ? Number(product.purchasePrice)
@@ -238,6 +243,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           name: product.name,
           price: product.price,
+          precioPremium: product.precioPremium ?? null,
           purchasePrice: product.purchasePrice,
           stock: product.stock,
           categoria: product.category,
@@ -279,6 +285,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     const payload = {
       name: updates.name ?? current.name,
       price: updates.price ?? current.price,
+      precioPremium: 'precioPremium' in updates ? updates.precioPremium : current.precioPremium,
       purchasePrice: updates.purchasePrice ?? current.purchasePrice,
       stock: updates.stock ?? current.stock,
       categoria: updates.category ?? current.category,

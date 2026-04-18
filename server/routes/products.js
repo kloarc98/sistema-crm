@@ -3,6 +3,8 @@ import { query } from '../db.js';
 import { notifyNoStockToAdminAndJefe } from '../services/alertEmailService.js';
 
 const router = express.Router();
+const GLOBAL_SETTINGS_TABLE = 'app_setting';
+const MAX_TOTAL_PRODUCTS_SETTING_KEY = 'max_total_products';
 
 async function notifyNoStockFromProductMutation({ productId, productName, previousStock, newStock, source }) {
   try {
@@ -99,6 +101,56 @@ async function getInactiveEstadoProductoId() {
   return getEstadoProductoIdByName('inhabilitado');
 }
 
+function normalizeMaxTotalProducts(value) {
+  if (value === null || typeof value === 'undefined' || String(value).trim() === '') {
+    return null;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  const rounded = Math.round(numeric);
+  if (rounded < 0) {
+    return 0;
+  }
+
+  return rounded;
+}
+
+async function ensureGlobalSettingsTable() {
+  await query(
+    `CREATE TABLE IF NOT EXISTS ${GLOBAL_SETTINGS_TABLE} (
+      setting_key VARCHAR(120) PRIMARY KEY,
+      setting_value VARCHAR(255) NOT NULL,
+      updated_by INT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_app_setting_updated_by
+        FOREIGN KEY (updated_by) REFERENCES usuario(usr_id)
+        ON DELETE SET NULL ON UPDATE CASCADE
+    ) ENGINE=InnoDB`
+  );
+}
+
+async function getMaxTotalProductsSetting() {
+  await ensureGlobalSettingsTable();
+
+  const rows = await query(
+    `SELECT setting_value
+     FROM ${GLOBAL_SETTINGS_TABLE}
+     WHERE setting_key = ?
+     LIMIT 1`,
+    [MAX_TOTAL_PRODUCTS_SETTING_KEY]
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return normalizeMaxTotalProducts(rows[0]?.setting_value);
+}
+
 router.get('/', async (req, res) => {
   try {
     const activeEstadoId = await getActiveEstadoProductoId();
@@ -121,6 +173,7 @@ router.get('/', async (req, res) => {
         prod_id AS id,
         prod_nombre AS name,
         prod_precio AS price,
+        prod_precio_premium AS precioPremium,
         COALESCE(prod_stock, 0) AS stock,
         COALESCE(prod_costo, 0) AS purchasePrice,
         COALESCE(prod_categoria, 'GENERAL') AS categoria,
@@ -128,8 +181,8 @@ router.get('/', async (req, res) => {
         COALESCE(prod_barr, '') AS barcode,
         p.est_pro_id AS est_pro_id,
         COALESCE(ep.est_pro_nombre, '') AS estado
-      FROM producto
-      p LEFT JOIN estado_producto ep ON ep.est_pro_id = p.est_pro_id
+      FROM producto p
+      LEFT JOIN estado_producto ep ON ep.est_pro_id = p.est_pro_id
       ${whereClause}
       ORDER BY prod_id DESC`,
       params
@@ -199,6 +252,7 @@ router.get('/:id', async (req, res) => {
         prod_id AS id,
         prod_nombre AS name,
         prod_precio AS price,
+        prod_precio_premium AS precioPremium,
         COALESCE(prod_stock, 0) AS stock,
         COALESCE(prod_costo, 0) AS purchasePrice,
         COALESCE(prod_categoria, 'General') AS categoria,
@@ -260,7 +314,7 @@ router.get('/:id/movements', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, price, stock, purchasePrice, description, categoria, barcode, observations } = req.body;
+  const { name, price, precioPremium, stock, purchasePrice, description, categoria, barcode, observations } = req.body;
 
   if (!name || !price) {
     return res.status(400).json({ error: 'Nombre y precio son requeridos' });
@@ -269,6 +323,18 @@ router.post('/', async (req, res) => {
   try {
     const normalizedName = String(name || '').trim();
     const normalizedBarcode = String(barcode || '').trim();
+
+    const maxTotalProducts = await getMaxTotalProductsSetting();
+    if (maxTotalProducts !== null) {
+      const totalRows = await query('SELECT COUNT(*) AS total FROM producto');
+      const currentTotalProducts = Number(totalRows?.[0]?.total || 0);
+
+      if (currentTotalProducts >= maxTotalProducts) {
+        return res.status(409).json({
+          error: `Se alcanzó el límite global de productos (${maxTotalProducts}). No se pueden crear más productos.`,
+        });
+      }
+    }
 
     if (normalizedName) {
       const duplicatedByName = await query(
@@ -320,11 +386,12 @@ router.post('/', async (req, res) => {
     const normalizedObservations = observations || '';
 
     await query(
-      `INSERT INTO producto (prod_nombre, prod_precio, prod_costo, prod_stock, prod_barr, prod_categoria, prod_descrip, est_pro_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO producto (prod_nombre, prod_precio, prod_precio_premium, prod_costo, prod_stock, prod_barr, prod_categoria, prod_descrip, est_pro_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         price,
+        typeof precioPremium === 'undefined' || precioPremium === '' ? null : precioPremium,
         typeof purchasePrice === 'undefined' ? null : purchasePrice,
         typeof stock === 'undefined' ? 0 : stock,
         barcode || null,
@@ -349,6 +416,7 @@ router.post('/', async (req, res) => {
       id: createdId,
       name,
       price,
+      precioPremium: typeof precioPremium === 'undefined' || precioPremium === '' ? null : precioPremium,
       stock: typeof stock === 'undefined' ? 0 : stock,
       purchasePrice: typeof purchasePrice === 'undefined' ? 0 : purchasePrice,
       categoria: normalizedCategory,
@@ -361,12 +429,12 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
-  const { name, price, stock, purchasePrice, description, categoria, barcode, observations } = req.body;
+  const { name, price, precioPremium, stock, purchasePrice, description, categoria, barcode, observations } = req.body;
 
   try {
     const requesterUserId = getRequesterUserId(req);
     const existing = await query(
-      `SELECT prod_id, prod_nombre, prod_precio, prod_stock, COALESCE(prod_costo, 0) AS prod_costo,
+      `SELECT prod_id, prod_nombre, prod_precio, prod_precio_premium, prod_stock, COALESCE(prod_costo, 0) AS prod_costo,
               COALESCE(prod_barr, '') AS prod_barr,
               COALESCE(prod_categoria, 'General') AS prod_categoria,
               COALESCE(prod_descrip, '') AS prod_descrip
@@ -383,6 +451,10 @@ router.put('/:id', async (req, res) => {
     const current = existing[0];
     const nextName = typeof name === 'undefined' ? current.prod_nombre : name;
     const nextPrice = typeof price === 'undefined' ? Number(current.prod_precio || 0) : Number(price);
+    const nextPrecioPremium =
+      typeof precioPremium === 'undefined'
+        ? (current.prod_precio_premium === null ? null : Number(current.prod_precio_premium))
+        : (precioPremium === '' || precioPremium === null ? null : Number(precioPremium));
     const nextStock = typeof stock === 'undefined' ? Number(current.prod_stock || 0) : Number(stock);
     const nextPurchasePrice =
       typeof purchasePrice === 'undefined' ? Number(current.prod_costo || 0) : Number(purchasePrice || 0);
@@ -446,6 +518,7 @@ router.put('/:id', async (req, res) => {
       `UPDATE producto
        SET prod_nombre = ?,
            prod_precio = ?,
+           prod_precio_premium = ?,
            prod_stock = ?,
            prod_costo = ?,
            prod_barr = ?,
@@ -456,6 +529,7 @@ router.put('/:id', async (req, res) => {
       [
         nextName,
         nextPrice,
+        nextPrecioPremium,
         nextStock,
         nextPurchasePrice,
         nextBarcode || null,

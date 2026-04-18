@@ -48,6 +48,12 @@ export function RoleScreenPermissions() {
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [draftRoleName, setDraftRoleName] = useState("");
   const [draftScreens, setDraftScreens] = useState<ScreenPermission[]>([]);
+  const [maxTotalUsersInput, setMaxTotalUsersInput] = useState("");
+  const [isLoadingUserLimit, setIsLoadingUserLimit] = useState(false);
+  const [isSavingUserLimit, setIsSavingUserLimit] = useState(false);
+  const [maxTotalProductsInput, setMaxTotalProductsInput] = useState("");
+  const [isLoadingProductLimit, setIsLoadingProductLimit] = useState(false);
+  const [isSavingProductLimit, setIsSavingProductLimit] = useState(false);
   const [error, setError] = useState("");
 
   const loadRoleScreenPermissions = async () => {
@@ -82,6 +88,70 @@ export function RoleScreenPermissions() {
 
   useEffect(() => {
     loadRoleScreenPermissions();
+  }, [isAdmin, user?.role]);
+
+  const loadMaxTotalUsersSetting = async () => {
+    if (!isAdmin) {
+      setMaxTotalUsersInput("");
+      return;
+    }
+
+    setIsLoadingUserLimit(true);
+    try {
+      const response = await fetch("/api/auth/settings/max-total-users", {
+        headers: {
+          "x-user-role": String(user?.role || ""),
+        },
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "No se pudo cargar el límite global de usuarios");
+      }
+
+      const nextValue = payload?.maxTotalUsers;
+      setMaxTotalUsersInput(nextValue === null || typeof nextValue === "undefined" ? "" : String(nextValue));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar el límite global de usuarios");
+    } finally {
+      setIsLoadingUserLimit(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMaxTotalUsersSetting();
+  }, [isAdmin, user?.role]);
+
+  const loadMaxTotalProductsSetting = async () => {
+    if (!isAdmin) {
+      setMaxTotalProductsInput("");
+      return;
+    }
+
+    setIsLoadingProductLimit(true);
+    try {
+      const response = await fetch("/api/auth/settings/max-total-products", {
+        headers: {
+          "x-user-role": String(user?.role || ""),
+        },
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "No se pudo cargar el límite global de productos");
+      }
+
+      const nextValue = payload?.maxTotalProducts;
+      setMaxTotalProductsInput(nextValue === null || typeof nextValue === "undefined" ? "" : String(nextValue));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar el límite global de productos");
+    } finally {
+      setIsLoadingProductLimit(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMaxTotalProductsSetting();
   }, [isAdmin, user?.role]);
 
   const selectedRole = roleScreenPermissions.find((entry) => entry.roleId === selectedRoleId) || null;
@@ -229,6 +299,92 @@ export function RoleScreenPermissions() {
     }
   };
 
+  const handleSaveMaxTotalUsers = async () => {
+    setError("");
+    setIsSavingUserLimit(true);
+
+    try {
+      const trimmed = maxTotalUsersInput.trim();
+      const isUnlimited = trimmed === "";
+
+      if (!isUnlimited && !Number.isFinite(Number(trimmed))) {
+        throw new Error("Debes ingresar un número válido o dejar el campo vacío para sin límite");
+      }
+
+      if (!isUnlimited && Number(trimmed) < 0) {
+        throw new Error("El límite global de usuarios no puede ser negativo");
+      }
+
+      const response = await fetch("/api/auth/settings/max-total-users", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": String(user?.role || ""),
+          "x-user-id": String(user?.id || ""),
+        },
+        body: JSON.stringify({
+          maxTotalUsers: isUnlimited ? null : Number(trimmed),
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "No se pudo guardar el límite global de usuarios");
+      }
+
+      const nextValue = payload?.maxTotalUsers;
+      setMaxTotalUsersInput(nextValue === null || typeof nextValue === "undefined" ? "" : String(nextValue));
+      addAlert("✓ Límite global de usuarios actualizado", "success");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar el límite global de usuarios");
+    } finally {
+      setIsSavingUserLimit(false);
+    }
+  };
+
+  const handleSaveMaxTotalProducts = async () => {
+    setError("");
+    setIsSavingProductLimit(true);
+
+    try {
+      const trimmed = maxTotalProductsInput.trim();
+      const isUnlimited = trimmed === "";
+
+      if (!isUnlimited && !Number.isFinite(Number(trimmed))) {
+        throw new Error("Debes ingresar un número válido o dejar el campo vacío para sin límite");
+      }
+
+      if (!isUnlimited && Number(trimmed) < 0) {
+        throw new Error("El límite global de productos no puede ser negativo");
+      }
+
+      const response = await fetch("/api/auth/settings/max-total-products", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": String(user?.role || ""),
+          "x-user-id": String(user?.id || ""),
+        },
+        body: JSON.stringify({
+          maxTotalProducts: isUnlimited ? null : Number(trimmed),
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "No se pudo guardar el límite global de productos");
+      }
+
+      const nextValue = payload?.maxTotalProducts;
+      setMaxTotalProductsInput(nextValue === null || typeof nextValue === "undefined" ? "" : String(nextValue));
+      addAlert("✓ Límite global de productos actualizado", "success");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar el límite global de productos");
+    } finally {
+      setIsSavingProductLimit(false);
+    }
+  };
+
   if (!isAdmin) {
     return (
       <div className={`min-h-screen ${darkMode ? "bg-gray-900" : "bg-gray-50"}`}>
@@ -261,6 +417,62 @@ export function RoleScreenPermissions() {
         </div>
 
         <div className="space-y-6">
+          <Card className={darkMode ? "bg-gray-800 border-gray-700" : ""}>
+            <CardHeader>
+              <CardTitle className={darkMode ? "text-white" : ""}>Límite global de usuarios</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label className={darkMode ? "text-gray-200" : ""}>Máximo total de usuarios en el sistema</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={maxTotalUsersInput}
+                  onChange={(e) => setMaxTotalUsersInput(e.target.value)}
+                  placeholder="Vacío = sin límite"
+                  className={darkMode ? "bg-gray-700 border-gray-600 text-white" : ""}
+                  disabled={isLoadingUserLimit || isSavingUserLimit}
+                />
+                <p className={`text-xs mt-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Este límite aplica para todo el sistema y no depende del rol.
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button type="button" onClick={handleSaveMaxTotalUsers} disabled={isLoadingUserLimit || isSavingUserLimit}>
+                  {isSavingUserLimit ? "Guardando..." : "Guardar límite"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={darkMode ? "bg-gray-800 border-gray-700" : ""}>
+            <CardHeader>
+              <CardTitle className={darkMode ? "text-white" : ""}>Límite global de productos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label className={darkMode ? "text-gray-200" : ""}>Máximo total de productos en el sistema</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={maxTotalProductsInput}
+                  onChange={(e) => setMaxTotalProductsInput(e.target.value)}
+                  placeholder="Vacío = sin límite"
+                  className={darkMode ? "bg-gray-700 border-gray-600 text-white" : ""}
+                  disabled={isLoadingProductLimit || isSavingProductLimit}
+                />
+                <p className={`text-xs mt-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Este límite aplica para todo el inventario y no depende del rol.
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button type="button" onClick={handleSaveMaxTotalProducts} disabled={isLoadingProductLimit || isSavingProductLimit}>
+                  {isSavingProductLimit ? "Guardando..." : "Guardar límite"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className={darkMode ? "bg-gray-800 border-gray-700" : ""}>
             <CardHeader>
               <div className="flex items-center gap-2">

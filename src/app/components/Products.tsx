@@ -7,6 +7,7 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { useTheme } from "../context/ThemeContext";
 import { useAlert } from "../context/AlertContext";
+import { useAuth } from "../context/AuthContext";
 import {
   Select,
   SelectContent,
@@ -59,10 +60,12 @@ export function Products() {
   const { products, isLoading, error, addProduct, updateProduct, deleteProduct, setProductStatus, refreshProducts } = useProducts();
   const { darkMode } = useTheme();
   const { addAlert } = useAlert();
+  const { user } = useAuth();
 
   const [selectedProductId, setSelectedProductId] = useState("");
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const [precioPremium, setPrecioPremium] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
   const [stock, setStock] = useState("");
   const [productSelectorText, setProductSelectorText] = useState("");
@@ -76,6 +79,7 @@ export function Products() {
   const [sortBy, setSortBy] = useState("none");
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>("activos");
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(() => loadLowStockThreshold());
+  const [maxTotalProducts, setMaxTotalProducts] = useState<number | null>(null);
 
   // Edit dialog state
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -83,6 +87,7 @@ export function Products() {
     id: string;
     name: string;
     price: string;
+    precioPremium: string;
     purchasePrice?: string;
     stock: string;
     category: string;
@@ -371,6 +376,7 @@ export function Products() {
         const created = await addProduct({
           name,
           price: parseFloat(price),
+          precioPremium: precioPremium ? parseFloat(precioPremium) : null,
           purchasePrice: parseFloat(purchasePrice),
           stock: parseInt(stock),
           category: normalizedCategory,
@@ -387,6 +393,7 @@ export function Products() {
       setSelectedProductId("");
       setName("");
       setPrice("");
+      setPrecioPremium("");
       setPurchasePrice("");
       setStock("");
       setCategory("");
@@ -437,6 +444,7 @@ export function Products() {
       id: product.id,
       name: product.name,
       price: product.price.toString(),
+      precioPremium: product.precioPremium != null ? String(product.precioPremium) : "",
       purchasePrice: (product.purchasePrice || 0).toString(),
       stock: product.stock.toString(),
       category: normalizedCategory,
@@ -499,6 +507,7 @@ export function Products() {
     await updateProduct(editingProduct.id, {
       name: editingProduct.name.toUpperCase(),
       price: parseFloat(editingProduct.price),
+      precioPremium: editingProduct.precioPremium ? parseFloat(editingProduct.precioPremium) : null,
       purchasePrice: editingProduct.purchasePrice ? parseFloat(editingProduct.purchasePrice) : undefined,
       stock: parseInt(editingProduct.stock),
       category: normalizedEditCategory,
@@ -585,6 +594,31 @@ export function Products() {
   }, []);
 
   useEffect(() => {
+    const loadMaxTotalProducts = async () => {
+      try {
+        const response = await fetch("/api/auth/settings/max-total-products", {
+          headers: {
+            "x-user-id": String(user?.id || ""),
+            "x-user-role": String(user?.role || ""),
+          },
+        });
+        if (!response.ok) {
+          throw new Error("No se pudo cargar el límite global de productos");
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        const value = payload?.maxTotalProducts;
+        const normalized = value === null || typeof value === "undefined" || value === "" ? null : Number(value);
+        setMaxTotalProducts(Number.isFinite(normalized as number) ? (normalized as number) : null);
+      } catch {
+        setMaxTotalProducts(null);
+      }
+    };
+
+    loadMaxTotalProducts();
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
     const handleLowStockThresholdChanged = () => {
       setLowStockThreshold(loadLowStockThreshold());
     };
@@ -629,6 +663,9 @@ export function Products() {
               <div>
                 <p className={`text-sm mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total de Productos</p>
                 <p className={`text-2xl font-bold ${darkMode ? 'text-white' : ''}`}>{formatNumber(totalProducts)}</p>
+                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {formatNumber(totalProducts)}/{maxTotalProducts === null ? "∞" : formatNumber(maxTotalProducts)}
+                </p>
               </div>
               <div className="bg-blue-50 p-3 rounded-lg">
                 <Package className="size-6 text-blue-600" />
@@ -739,7 +776,7 @@ export function Products() {
               </div>
 
               <div>
-                <Label htmlFor="price" className={darkMode ? 'text-gray-200' : ''}>Precio de Venta (Q)</Label>
+                <Label htmlFor="price" className={darkMode ? 'text-gray-200' : ''}>Precio Estándar (Q)</Label>
                 <Input
                   id="price"
                   type="number"
@@ -748,6 +785,21 @@ export function Products() {
                   value={price}
                   autoComplete="new-password"
                   onChange={(e) => setPrice(e.target.value)}
+                  disabled={!!isExistingProduct}
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="precio-premium" className={darkMode ? 'text-gray-200' : ''}>Precio Premium (Q) <span className={`text-xs font-normal ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>(Opcional)</span></Label>
+                <Input
+                  id="precio-premium"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={precioPremium}
+                  autoComplete="new-password"
+                  onChange={(e) => setPrecioPremium(e.target.value)}
                   disabled={!!isExistingProduct}
                   className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
                 />
@@ -972,6 +1024,11 @@ export function Products() {
                         <p className={`font-semibold text-lg ${darkMode ? 'text-white' : ''}`}>
                           {formatCurrency(product.price)}
                         </p>
+                        {product.precioPremium != null && (
+                          <p className={`text-xs font-medium text-purple-600`}>
+                            Premium: {formatCurrency(product.precioPremium)}
+                          </p>
+                        )}
                         <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                           Total: {formatCurrency(product.price * product.stock)}
                         </p>
@@ -1205,7 +1262,7 @@ export function Products() {
               </div>
 
               <div>
-                <Label htmlFor="edit-price" className={darkMode ? 'text-gray-200' : ''}>Precio de Venta (Q)</Label>
+                <Label htmlFor="edit-price" className={darkMode ? 'text-gray-200' : ''}>Precio Estándar (Q)</Label>
                 <Input
                   id="edit-price"
                   type="number"
@@ -1214,6 +1271,22 @@ export function Products() {
                   autoComplete="new-password"
                   onChange={(e) =>
                     setEditingProduct({ ...editingProduct, price: e.target.value })
+                  }
+                  placeholder="0.00"
+                  className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-precio-premium" className={darkMode ? 'text-gray-200' : ''}>Precio Premium (Q) <span className={`text-xs font-normal ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>(Opcional)</span></Label>
+                <Input
+                  id="edit-precio-premium"
+                  type="number"
+                  step="0.01"
+                  value={editingProduct.precioPremium}
+                  autoComplete="new-password"
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, precioPremium: e.target.value })
                   }
                   placeholder="0.00"
                   className={darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : ''}

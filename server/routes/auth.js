@@ -11,6 +11,8 @@ const router = express.Router();
 const GLOBAL_SETTINGS_TABLE = 'app_setting';
 const PAYMENT_REMINDER_DAYS_SETTING_KEY = 'payment_reminder_days';
 const LOW_STOCK_THRESHOLD_SETTING_KEY = 'low_stock_threshold';
+const MAX_TOTAL_USERS_SETTING_KEY = 'max_total_users';
+const MAX_TOTAL_PRODUCTS_SETTING_KEY = 'max_total_products';
 const DEFAULT_PAYMENT_REMINDER_DAYS = 7;
 const DEFAULT_LOW_STOCK_THRESHOLD = 5;
 const MIN_REMINDER_DAYS = 1;
@@ -278,6 +280,42 @@ function normalizeLowStockThreshold(value) {
   return rounded;
 }
 
+function normalizeMaxTotalUsers(value) {
+  if (value === null || typeof value === 'undefined' || String(value).trim() === '') {
+    return null;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  const rounded = Math.round(numeric);
+  if (rounded < 0) {
+    return 0;
+  }
+
+  return rounded;
+}
+
+function normalizeMaxTotalProducts(value) {
+  if (value === null || typeof value === 'undefined' || String(value).trim() === '') {
+    return null;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  const rounded = Math.round(numeric);
+  if (rounded < 0) {
+    return 0;
+  }
+
+  return rounded;
+}
+
 async function ensureGlobalSettingsTable() {
   await query(
     `CREATE TABLE IF NOT EXISTS ${GLOBAL_SETTINGS_TABLE} (
@@ -369,6 +407,74 @@ async function updateLowStockThresholdSetting(value, updatedBy) {
        setting_value = VALUES(setting_value),
        updated_by = VALUES(updated_by)`,
     [LOW_STOCK_THRESHOLD_SETTING_KEY, String(normalized), updatedBy || null]
+  );
+
+  return normalized;
+}
+
+async function getMaxTotalUsersSetting() {
+  await ensureGlobalSettingsTable();
+
+  const rows = await query(
+    `SELECT setting_value
+     FROM ${GLOBAL_SETTINGS_TABLE}
+     WHERE setting_key = ?
+     LIMIT 1`,
+    [MAX_TOTAL_USERS_SETTING_KEY]
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return normalizeMaxTotalUsers(rows[0]?.setting_value);
+}
+
+async function updateMaxTotalUsersSetting(value, updatedBy) {
+  await ensureGlobalSettingsTable();
+
+  const normalized = normalizeMaxTotalUsers(value);
+  await query(
+    `INSERT INTO ${GLOBAL_SETTINGS_TABLE} (setting_key, setting_value, updated_by)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       setting_value = VALUES(setting_value),
+       updated_by = VALUES(updated_by)`,
+    [MAX_TOTAL_USERS_SETTING_KEY, normalized === null ? '' : String(normalized), updatedBy || null]
+  );
+
+  return normalized;
+}
+
+async function getMaxTotalProductsSetting() {
+  await ensureGlobalSettingsTable();
+
+  const rows = await query(
+    `SELECT setting_value
+     FROM ${GLOBAL_SETTINGS_TABLE}
+     WHERE setting_key = ?
+     LIMIT 1`,
+    [MAX_TOTAL_PRODUCTS_SETTING_KEY]
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return normalizeMaxTotalProducts(rows[0]?.setting_value);
+}
+
+async function updateMaxTotalProductsSetting(value, updatedBy) {
+  await ensureGlobalSettingsTable();
+
+  const normalized = normalizeMaxTotalProducts(value);
+  await query(
+    `INSERT INTO ${GLOBAL_SETTINGS_TABLE} (setting_key, setting_value, updated_by)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       setting_value = VALUES(setting_value),
+       updated_by = VALUES(updated_by)`,
+    [MAX_TOTAL_PRODUCTS_SETTING_KEY, normalized === null ? '' : String(normalized), updatedBy || null]
   );
 
   return normalized;
@@ -653,6 +759,82 @@ router.put('/settings/low-stock-threshold', async (req, res) => {
   try {
     const threshold = await updateLowStockThresholdSetting(requestedThreshold, requesterUserId || null);
     return res.json({ success: true, threshold });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/settings/max-total-users', async (req, res) => {
+  try {
+    const maxTotalUsers = await getMaxTotalUsersSetting();
+    return res.json({ maxTotalUsers });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/settings/max-total-users', async (req, res) => {
+  const requesterRole = String(req.headers['x-user-role'] || req.body?.requesterRole || '').toLowerCase();
+  const requesterUserId = Number(req.headers['x-user-id'] || req.body?.requesterUserId || 0);
+  const requestedMaxTotalUsers = req.body?.maxTotalUsers;
+  const isUnlimitedRequest =
+    requestedMaxTotalUsers === null ||
+    typeof requestedMaxTotalUsers === 'undefined' ||
+    String(requestedMaxTotalUsers).trim() === '';
+
+  if (!canManageGlobalSettings(requesterRole)) {
+    return res.status(403).json({ error: 'Solo admin o jefe pueden cambiar el limite de usuarios' });
+  }
+
+  if (!isUnlimitedRequest && !Number.isFinite(Number(requestedMaxTotalUsers))) {
+    return res.status(400).json({ error: 'Debes enviar un numero valido para el limite de usuarios' });
+  }
+
+  if (!isUnlimitedRequest && Number(requestedMaxTotalUsers) < 0) {
+    return res.status(400).json({ error: 'El limite de usuarios no puede ser negativo' });
+  }
+
+  try {
+    const maxTotalUsers = await updateMaxTotalUsersSetting(requestedMaxTotalUsers, requesterUserId || null);
+    return res.json({ success: true, maxTotalUsers });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/settings/max-total-products', async (req, res) => {
+  try {
+    const maxTotalProducts = await getMaxTotalProductsSetting();
+    return res.json({ maxTotalProducts });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/settings/max-total-products', async (req, res) => {
+  const requesterRole = String(req.headers['x-user-role'] || req.body?.requesterRole || '').toLowerCase();
+  const requesterUserId = Number(req.headers['x-user-id'] || req.body?.requesterUserId || 0);
+  const requestedMaxTotalProducts = req.body?.maxTotalProducts;
+  const isUnlimitedRequest =
+    requestedMaxTotalProducts === null ||
+    typeof requestedMaxTotalProducts === 'undefined' ||
+    String(requestedMaxTotalProducts).trim() === '';
+
+  if (!canManageGlobalSettings(requesterRole)) {
+    return res.status(403).json({ error: 'Solo admin o jefe pueden cambiar el limite de productos' });
+  }
+
+  if (!isUnlimitedRequest && !Number.isFinite(Number(requestedMaxTotalProducts))) {
+    return res.status(400).json({ error: 'Debes enviar un numero valido para el limite de productos' });
+  }
+
+  if (!isUnlimitedRequest && Number(requestedMaxTotalProducts) < 0) {
+    return res.status(400).json({ error: 'El limite de productos no puede ser negativo' });
+  }
+
+  try {
+    const maxTotalProducts = await updateMaxTotalProductsSetting(requestedMaxTotalProducts, requesterUserId || null);
+    return res.json({ success: true, maxTotalProducts });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -1302,6 +1484,18 @@ router.post('/users', async (req, res) => {
       return res.status(403).json({ error: 'Solo un administrador puede crear usuarios administradores' });
     }
 
+    const maxTotalUsers = await getMaxTotalUsersSetting();
+    if (maxTotalUsers !== null) {
+      const totalRows = await query('SELECT COUNT(*) AS total FROM usuario');
+      const currentTotalUsers = Number(totalRows?.[0]?.total || 0);
+
+      if (currentTotalUsers >= maxTotalUsers) {
+        return res.status(409).json({
+          error: `Se alcanzó el límite global de usuarios (${maxTotalUsers}). No se pueden crear más usuarios.`,
+        });
+      }
+    }
+
     const passwordHash = await hashPassword(password);
 
     await query(
@@ -1371,8 +1565,13 @@ router.get('/users/:id', async (req, res) => {
 
 router.put('/users/:id', async (req, res) => {
   const { nombres, apellidos, correo, telefono, rol, usuario, password, coverageAssignments } = req.body;
+  const requesterRole = String(req.headers['x-user-role'] || req.body?.requesterRole || '').toLowerCase();
 
   try {
+    if (typeof password !== 'undefined' && password !== '' && !isAdminRole(requesterRole)) {
+      return res.status(403).json({ error: 'Solo admin puede modificar contraseñas de usuarios existentes' });
+    }
+
     const hasCoverageAssignments = typeof coverageAssignments !== 'undefined';
     const normalizedCoverageAssignments = hasCoverageAssignments
       ? await normalizeCoverageAssignments(coverageAssignments)
@@ -1453,6 +1652,24 @@ router.put('/users/:id/status', async (req, res) => {
   }
 
   try {
+    const targetRows = await query(
+      `SELECT COALESCE(r.rl_nombre, '') AS roleName
+       FROM usuario u
+       LEFT JOIN rol r ON r.rl_id = u.rl_id
+       WHERE u.usr_id = ?
+       LIMIT 1`,
+      [req.params.id]
+    );
+
+    if (targetRows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const targetRoleName = String(targetRows[0]?.roleName || '');
+    if (isJefeRole(requesterRole) && isAdminRole(targetRoleName)) {
+      return res.status(403).json({ error: 'El jefe no puede cambiar estado de usuarios admin' });
+    }
+
     const estadoId = await getEstadoUsuarioIdByName(estadoSolicitado);
     await query('UPDATE usuario SET est_id = ? WHERE usr_id = ?', [estadoId, req.params.id]);
 
@@ -1503,6 +1720,24 @@ router.delete('/users/:id', async (req, res) => {
   }
 
   try {
+    const targetRows = await query(
+      `SELECT COALESCE(r.rl_nombre, '') AS roleName
+       FROM usuario u
+       LEFT JOIN rol r ON r.rl_id = u.rl_id
+       WHERE u.usr_id = ?
+       LIMIT 1`,
+      [req.params.id]
+    );
+
+    if (targetRows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const targetRoleName = String(targetRows[0]?.roleName || '');
+    if (isJefeRole(requesterRole) && isAdminRole(targetRoleName)) {
+      return res.status(403).json({ error: 'El jefe no puede inactivar usuarios admin' });
+    }
+
     const estadoInactivoId = await getEstadoUsuarioIdByName('inactivo');
     await query('UPDATE usuario SET est_id = ? WHERE usr_id = ?', [estadoInactivoId, req.params.id]);
     res.json({ message: 'Usuario inactivado', est_id: estadoInactivoId, estado: 'inactivo' });

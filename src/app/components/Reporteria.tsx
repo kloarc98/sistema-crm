@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
@@ -48,6 +48,178 @@ interface FilterCriteria {
 type SortKey = "id" | "product_name" | "user_name" | "client_name" | "total" | "status" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
 type PrimaryFilter = "" | "pedido" | "producto";
+
+interface SearchableFilterInputProps {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder: string;
+  darkMode: boolean;
+  disabled?: boolean;
+  normalizeInput?: (value: string) => string;
+}
+
+function SearchableFilterInput({
+  id,
+  value,
+  onChange,
+  options,
+  placeholder,
+  darkMode,
+  disabled = false,
+  normalizeInput,
+}: SearchableFilterInputProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const filteredOptions = useMemo(() => {
+    const query = value.trim().toLowerCase();
+    const base = query
+      ? options.filter((option) => option.toLowerCase().includes(query))
+      : options;
+
+    return base.slice(0, 80);
+  }, [options, value]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!containerRef.current) return;
+      const target = event.target as Node;
+      if (!containerRef.current.contains(target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setHighlightedIndex(-1);
+    }
+  }, [isOpen]);
+
+  const normalize = (raw: string) => (normalizeInput ? normalizeInput(raw) : raw);
+
+  const handleSelect = (selected: string) => {
+    onChange(normalize(selected));
+    setIsOpen(false);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => {
+          onChange(normalize(e.target.value));
+          if (!isOpen) setIsOpen(true);
+        }}
+        onFocus={() => {
+          if (!disabled) setIsOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            if (!isOpen) {
+              setIsOpen(true);
+              setHighlightedIndex(0);
+              return;
+            }
+            setHighlightedIndex((prev) => Math.min(prev + 1, filteredOptions.length - 1));
+            return;
+          }
+
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlightedIndex((prev) => Math.max(prev - 1, 0));
+            return;
+          }
+
+          if (e.key === "Enter" && isOpen && highlightedIndex >= 0) {
+            e.preventDefault();
+            const selected = filteredOptions[highlightedIndex];
+            if (selected) {
+              handleSelect(selected);
+            }
+            return;
+          }
+
+          if (e.key === "Escape") {
+            setIsOpen(false);
+          }
+        }}
+        disabled={disabled}
+        placeholder={placeholder}
+        autoComplete="off"
+        className={`h-10 w-full rounded-md border px-3 pr-9 text-sm ${
+          darkMode
+            ? "border-gray-600 bg-gray-900 text-gray-100"
+            : "border-gray-300 bg-white text-gray-900"
+        } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+      />
+
+      <button
+        type="button"
+        onClick={() => {
+          if (!disabled) setIsOpen((prev) => !prev);
+        }}
+        disabled={disabled}
+        aria-label="Mostrar opciones"
+        className={`absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 ${
+          darkMode ? "text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
+        } ${disabled ? "pointer-events-none" : ""}`}
+      >
+        ▾
+      </button>
+
+      {isOpen && !disabled && (
+        <div className={`absolute left-0 right-0 z-40 mt-1 overflow-hidden rounded-md border shadow-lg ${
+          darkMode ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"
+        }`}>
+          <ul className="max-h-56 overflow-y-auto py-1">
+            {filteredOptions.length === 0 ? (
+              <li className={`px-3 py-2 text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Sin resultados
+              </li>
+            ) : (
+              filteredOptions.map((option, index) => {
+                const isHighlighted = index === highlightedIndex;
+                return (
+                  <li key={`${id}-${option}`}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleSelect(option)}
+                      className={`w-full px-3 py-2 text-left text-sm ${
+                        isHighlighted
+                          ? darkMode
+                            ? "bg-blue-900/50 text-blue-100"
+                            : "bg-blue-50 text-blue-800"
+                          : darkMode
+                            ? "text-gray-200 hover:bg-gray-800"
+                            : "text-gray-800 hover:bg-gray-50"
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Reporteria() {
   const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -347,12 +519,6 @@ export function Reporteria() {
     setSortBy(primaryFilter === "producto" ? "product_name" : "created_at");
     setSortDirection(primaryFilter === "producto" ? "asc" : "desc");
   }, [primaryFilter]);
-
-  useEffect(() => {
-    if (orderFilter && !orderOptions.includes(orderFilter)) {
-      setOrderFilter("");
-    }
-  }, [orderFilter, orderOptions]);
 
   useEffect(() => {
     const exists = productOptions.some((product) => product.toLowerCase() === normalizedProductFilter);
@@ -860,75 +1026,51 @@ export function Reporteria() {
 
                   {primaryFilter === "pedido" && (
                     <>
-                      <input
+                      <SearchableFilterInput
                         id="reporteria-order-filter-primary"
-                        list="reporteria-order-options"
                         value={orderFilter}
-                        onChange={(e) => setOrderFilter(e.target.value.replace(/\D/g, ""))}
+                        onChange={setOrderFilter}
+                        options={orderOptions}
+                        normalizeInput={(value) => value.replace(/\D/g, "")}
                         placeholder="Todos los pedidos"
-                        className={`h-10 rounded-md border px-3 text-sm ${
-                          darkMode
-                            ? "border-gray-600 bg-gray-900 text-gray-100"
-                            : "border-gray-300 bg-white text-gray-900"
-                        }`}
+                        darkMode={darkMode}
                       />
-                      <datalist id="reporteria-order-options">
-                        {orderOptions.map((option) => (
-                          <option key={option} value={option} />
-                        ))}
-                      </datalist>
                     </>
                   )}
 
                   {primaryFilter === "producto" && (
                     <>
-                      <input
+                      <SearchableFilterInput
                         id="reporteria-product-filter-primary"
-                        list="reporteria-product-options"
                         value={productFilter}
-                        onChange={(e) => setProductFilter(e.target.value)}
+                        onChange={setProductFilter}
+                        options={productOptions}
                         placeholder="Todos los productos"
-                        className={`h-10 rounded-md border px-3 text-sm ${
-                          darkMode
-                            ? "border-gray-600 bg-gray-900 text-gray-100"
-                            : "border-gray-300 bg-white text-gray-900"
-                        }`}
+                        darkMode={darkMode}
                       />
-                      <datalist id="reporteria-product-options">
-                        {productOptions.map((option) => (
-                          <option key={option} value={option} />
-                        ))}
-                      </datalist>
                     </>
                   )}
 
                   {primaryFilter && primaryFilter !== "pedido" && (
-                    <input
+                    <SearchableFilterInput
                       id="reporteria-order-filter-secondary"
-                      list="reporteria-order-options"
                       value={orderFilter}
-                      onChange={(e) => setOrderFilter(e.target.value.replace(/\D/g, ""))}
+                      onChange={setOrderFilter}
+                      options={orderOptions}
+                      normalizeInput={(value) => value.replace(/\D/g, "")}
                       placeholder="Todos los pedidos"
-                      className={`h-10 rounded-md border px-3 text-sm ${
-                        darkMode
-                          ? "border-gray-600 bg-gray-900 text-gray-100"
-                          : "border-gray-300 bg-white text-gray-900"
-                      }`}
+                      darkMode={darkMode}
                     />
                   )}
 
                   {primaryFilter && primaryFilter !== "producto" && (
-                    <input
+                    <SearchableFilterInput
                       id="reporteria-product-filter-secondary"
-                      list="reporteria-product-options"
                       value={productFilter}
-                      onChange={(e) => setProductFilter(e.target.value)}
+                      onChange={setProductFilter}
+                      options={productOptions}
                       placeholder="Todos los productos"
-                      className={`h-10 rounded-md border px-3 text-sm ${
-                        darkMode
-                          ? "border-gray-600 bg-gray-900 text-gray-100"
-                          : "border-gray-300 bg-white text-gray-900"
-                      }`}
+                      darkMode={darkMode}
                     />
                   )}
 
@@ -944,45 +1086,27 @@ export function Reporteria() {
 
                 <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <>
-                  <input
+                  <SearchableFilterInput
                     id="reporteria-user-filter"
-                    list="reporteria-user-options"
                     value={userFilter}
-                    onChange={(e) => setUserFilter(e.target.value)}
+                    onChange={setUserFilter}
+                    options={userOptions}
                     disabled={!primaryFilter}
                     placeholder="Todos los usuarios"
-                    className={`h-10 rounded-md border px-3 text-sm ${
-                      darkMode
-                        ? "border-gray-600 bg-gray-900 text-gray-100"
-                        : "border-gray-300 bg-white text-gray-900"
-                    } ${!primaryFilter ? "opacity-60 cursor-not-allowed" : ""}`}
+                    darkMode={darkMode}
                   />
-                  <datalist id="reporteria-user-options">
-                    {userOptions.map((option) => (
-                      <option key={option} value={option} />
-                    ))}
-                  </datalist>
                 </>
 
                 <>
-                  <input
+                  <SearchableFilterInput
                     id="reporteria-client-filter"
-                    list="reporteria-client-options"
                     value={clientFilter}
-                    onChange={(e) => setClientFilter(e.target.value)}
+                    onChange={setClientFilter}
+                    options={clientOptions}
                     disabled={!primaryFilter}
                     placeholder="Todos los clientes"
-                    className={`h-10 rounded-md border px-3 text-sm ${
-                      darkMode
-                        ? "border-gray-600 bg-gray-900 text-gray-100"
-                        : "border-gray-300 bg-white text-gray-900"
-                    } ${!primaryFilter ? "opacity-60 cursor-not-allowed" : ""}`}
+                    darkMode={darkMode}
                   />
-                  <datalist id="reporteria-client-options">
-                    {clientOptions.map((option) => (
-                      <option key={option} value={option} />
-                    ))}
-                  </datalist>
                 </>
 
                 <input
@@ -1025,28 +1149,28 @@ export function Reporteria() {
             )}
             <div className="grid grid-cols-1 xl:grid-cols-8 gap-6">
               <div className={primaryFilter === "producto" ? "xl:col-span-8" : "xl:col-span-6"}>
-                <div className={`overflow-x-auto rounded-lg border ${darkMode ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"}`}>
-                  <table className={`min-w-[1100px] w-full table-auto divide-y ${darkMode ? "divide-gray-700 text-gray-200" : "divide-gray-200 text-gray-800"}`}>
-                    <thead className={darkMode ? "bg-gray-800" : "bg-gray-50"}>
+                <div className={`overflow-x-auto rounded-2xl border shadow-sm ${darkMode ? "border-gray-700 bg-gray-900 shadow-black/20" : "border-gray-200 bg-white shadow-gray-200/80"}`}>
+                  <table className={`min-w-[1100px] w-full table-auto ${darkMode ? "text-gray-200" : "text-gray-800"}`}>
+                    <thead className={`sticky top-0 z-10 ${darkMode ? "bg-gray-800/95" : "bg-slate-50/95"}`}>
                       <tr>
-                        <th className={`w-[18%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                        <th className={`w-[18%] px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>
                           {primaryFilter === "producto" ? renderSortLabel("Producto", "product_name") : renderSortLabel("ID Pedido", "id")}
                         </th>
                         {primaryFilter === "producto" && (
-                          <th className={`w-[10%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                          <th className={`w-[10%] px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>
                             {renderSortLabel("ID Pedido", "id")}
                           </th>
                         )}
-                        <th className={`w-[11%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>{renderSortLabel("Usuario", "user_name")}</th>
-                        <th className={`w-[18%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>{renderSortLabel("Cliente", "client_name")}</th>
-                        <th className={`w-[11%] px-3 py-2 text-right text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>{renderSortLabel("Monto Total", "total", "right")}</th>
-                        <th className={`w-[9%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>{renderSortLabel("Estado", "status")}</th>
-                        <th className={`w-[16%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>{renderSortLabel("Fecha Creación", "created_at")}</th>
-                        <th className={`w-[20%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>{renderSortLabel("Fecha Última Modificación", "updated_at")}</th>
-                        <th className={`w-[8%] px-3 py-2 text-left text-sm font-medium whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-gray-600"}`}>Acciones</th>
+                        <th className={`w-[11%] px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>{renderSortLabel("Usuario", "user_name")}</th>
+                        <th className={`w-[18%] px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>{renderSortLabel("Cliente", "client_name")}</th>
+                        <th className={`w-[11%] px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>{renderSortLabel("Monto Total", "total", "right")}</th>
+                        <th className={`w-[9%] px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>{renderSortLabel("Estado", "status")}</th>
+                        <th className={`w-[16%] px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>{renderSortLabel("Fecha Creación", "created_at")}</th>
+                        <th className={`w-[20%] px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>{renderSortLabel("Fecha Última Modificación", "updated_at")}</th>
+                        <th className={`w-[8%] px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-normal break-words ${darkMode ? "text-gray-300" : "text-slate-600"}`}>Acciones</th>
                       </tr>
                     </thead>
-                    <tbody className={darkMode ? "bg-gray-900 divide-y divide-gray-700" : "bg-white divide-y divide-gray-200"}>
+                    <tbody className={darkMode ? "divide-y divide-gray-800 bg-gray-900" : "divide-y divide-slate-100 bg-white"}>
                       {primaryFilter === "producto" ? (
                         sortedProductRows.length === 0 ? (
                           <tr>
@@ -1055,18 +1179,26 @@ export function Reporteria() {
                             </td>
                           </tr>
                         ) : (
-                            paginatedSortedProductRows.map((row) => {
+                            paginatedSortedProductRows.map((row, index) => {
                             const pedido = row.pedido;
+                            const zebraClass = darkMode
+                              ? index % 2 === 0 ? "bg-gray-900" : "bg-gray-900/40"
+                              : index % 2 === 0 ? "bg-white" : "bg-slate-50/50";
 
                             return (
-                              <tr key={row.row_id} className={darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}>
-                                <td className="px-3 py-3 text-sm whitespace-normal break-words">{row.product_name}</td>
-                                <td className="px-3 py-3 text-sm whitespace-normal break-words">{pedido.id}</td>
+                              <tr key={row.row_id} className={`${zebraClass} transition-colors ${darkMode ? "hover:bg-gray-800/80" : "hover:bg-sky-50"}`}>
+                                <td className="px-3 py-3 text-sm font-medium whitespace-normal break-words">{row.product_name}</td>
+                                <td className="px-3 py-3 text-sm whitespace-normal break-words">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${darkMode ? "bg-blue-900/50 text-blue-200" : "bg-blue-100 text-blue-700"}`}>
+                                    #{pedido.id}
+                                  </span>
+                                </td>
                                 <td className="px-3 py-3 text-sm whitespace-normal break-words">{pedido.user_name || pedido.user_id || '—'}</td>
                                 <td className="px-3 py-3 text-sm whitespace-normal break-words">{pedido.client_name || pedido.cli_id || '—'}</td>
-                                <td className="px-3 py-3 text-sm text-right whitespace-normal break-words">{formatCurrency(pedido.total)}</td>
+                                <td className="px-3 py-3 text-sm text-right font-semibold text-emerald-600 whitespace-normal break-words">{formatCurrency(pedido.total)}</td>
                                 <td className="px-3 py-3 text-sm whitespace-normal break-words">
-                                  <span className={`px-2 py-1 rounded text-xs font-semibold ${getPhaseClass(pedido.phase, pedido.status)}`}>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getPhaseClass(pedido.phase, pedido.status)}`}>
+                                    <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />
                                     {pedido.status}
                                   </span>
                                 </td>
@@ -1077,7 +1209,7 @@ export function Reporteria() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setSelectedOrderId(pedido.id)}
-                                    className={`h-8 w-8 p-0 ${darkMode ? "border-gray-600 text-gray-200 hover:bg-gray-700" : ""}`}
+                                    className={`h-8 w-8 rounded-full p-0 ${darkMode ? "border-gray-600 text-gray-200 hover:bg-blue-900/40 hover:text-blue-200" : "border-slate-300 text-slate-600 hover:bg-blue-50 hover:text-blue-700"}`}
                                   >
                                     <Eye className="size-4" />
                                   </Button>
@@ -1093,14 +1225,24 @@ export function Reporteria() {
                           </td>
                         </tr>
                       ) : (
-                        paginatedSorted.map((pedido) => (
-                          <tr key={pedido.id} className={darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}>
-                            <td className="px-3 py-3 text-sm whitespace-normal break-words">{pedido.id}</td>
+                        paginatedSorted.map((pedido, index) => {
+                          const zebraClass = darkMode
+                            ? index % 2 === 0 ? "bg-gray-900" : "bg-gray-900/40"
+                            : index % 2 === 0 ? "bg-white" : "bg-slate-50/50";
+
+                          return (
+                          <tr key={pedido.id} className={`${zebraClass} transition-colors ${darkMode ? "hover:bg-gray-800/80" : "hover:bg-sky-50"}`}>
+                            <td className="px-3 py-3 text-sm whitespace-normal break-words">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${darkMode ? "bg-blue-900/50 text-blue-200" : "bg-blue-100 text-blue-700"}`}>
+                                #{pedido.id}
+                              </span>
+                            </td>
                             <td className="px-3 py-3 text-sm whitespace-normal break-words">{pedido.user_name || pedido.user_id || '—'}</td>
                             <td className="px-3 py-3 text-sm whitespace-normal break-words">{pedido.client_name || pedido.cli_id || '—'}</td>
-                            <td className="px-3 py-3 text-sm text-right whitespace-normal break-words">{formatCurrency(pedido.total)}</td>
+                            <td className="px-3 py-3 text-sm text-right font-semibold text-emerald-600 whitespace-normal break-words">{formatCurrency(pedido.total)}</td>
                             <td className="px-3 py-3 text-sm whitespace-normal break-words">
-                              <span className={`px-2 py-1 rounded text-xs font-semibold ${getPhaseClass(pedido.phase, pedido.status)}`}>
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getPhaseClass(pedido.phase, pedido.status)}`}>
+                                <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />
                                 {pedido.status}
                               </span>
                             </td>
@@ -1111,13 +1253,14 @@ export function Reporteria() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setSelectedOrderId(pedido.id)}
-                                className={`h-8 w-8 p-0 ${darkMode ? "border-gray-600 text-gray-200 hover:bg-gray-700" : ""}`}
+                                className={`h-8 w-8 rounded-full p-0 ${darkMode ? "border-gray-600 text-gray-200 hover:bg-blue-900/40 hover:text-blue-200" : "border-slate-300 text-slate-600 hover:bg-blue-50 hover:text-blue-700"}`}
                               >
                                 <Eye className="size-4" />
                               </Button>
                             </td>
                           </tr>
-                        ))
+                        );
+                      })
                       )}
                     </tbody>
                   </table>

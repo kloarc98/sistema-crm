@@ -185,6 +185,7 @@ router.get('/', async (req, res) => {
         COALESCE(c.cli_telefono_op, '') AS telefonoOpcional,
         COALESCE(c.cli_correo, '') AS correo,
         UPPER(COALESCE(c.cli_nit, '')) AS nit,
+        COALESCE(c.cli_tipo, 'estandar') AS tipoCliente,
         c.dep_id AS departamentoId,
         COALESCE(d.dep_nombre, '') AS departamentoNombre,
         c.mun_id AS municipioId,
@@ -250,6 +251,7 @@ router.get('/:id', async (req, res) => {
         COALESCE(c.cli_telefono_op, '') AS telefonoOpcional,
         COALESCE(c.cli_correo, '') AS correo,
         UPPER(COALESCE(c.cli_nit, '')) AS nit,
+        COALESCE(c.cli_tipo, 'estandar') AS tipoCliente,
         c.dep_id AS departamentoId,
         COALESCE(d.dep_nombre, '') AS departamentoNombre,
         c.mun_id AS municipioId,
@@ -287,6 +289,7 @@ router.post('/', async (req, res) => {
     nit,
     departamentoId,
     municipioId,
+    tipoCliente,
   } = req.body;
 
   if (!nombreEmpresa) {
@@ -317,6 +320,7 @@ router.post('/', async (req, res) => {
     }
 
     const estadoId = await getEstadoClienteIdByName('activo');
+    const tipoClienteValue = tipoCliente === 'premium' ? 'premium' : 'estandar';
     const result = await query(
       `INSERT INTO cliente (
         cli_nombre_empresa,
@@ -328,8 +332,9 @@ router.post('/', async (req, res) => {
         cli_telefono_op,
         cli_correo,
         cli_nit,
+        cli_tipo,
         est_cli_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         String(nombreEmpresa).toUpperCase(),
         String(nombreDueno || '').toUpperCase() || null,
@@ -340,6 +345,7 @@ router.post('/', async (req, res) => {
         telefonoOpcional || null,
         correo || null,
         String(nit || '').toUpperCase() || null,
+        tipoClienteValue,
         estadoId,
       ]
     );
@@ -355,6 +361,7 @@ router.post('/', async (req, res) => {
       telefonoOpcional: telefonoOpcional || '',
       correo: correo || '',
       nit: String(nit || '').toUpperCase(),
+      tipoCliente: tipoClienteValue,
       estado: 'activo',
     });
   } catch (error) {
@@ -373,6 +380,7 @@ router.put('/:id', async (req, res) => {
     nit,
     departamentoId,
     municipioId,
+    tipoCliente,
   } = req.body;
 
   try {
@@ -473,6 +481,12 @@ router.put('/:id', async (req, res) => {
     if (typeof nit !== 'undefined') {
       setClauses.push('cli_nit = ?');
       params.push(nit ? String(nit).toUpperCase() : null);
+    }
+
+    if (typeof tipoCliente !== 'undefined') {
+      const tipoValue = tipoCliente === 'premium' ? 'premium' : 'estandar';
+      setClauses.push('cli_tipo = ?');
+      params.push(tipoValue);
     }
 
     if (setClauses.length === 0) {

@@ -29,6 +29,7 @@ export function Dashboard() {
   const { darkMode } = useTheme();
   const { user } = useAuth();
   const [orders, setOrders] = useState<DashboardOrderRow[]>([]);
+  const [inventoryProductCount, setInventoryProductCount] = useState(0);
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [chartError, setChartError] = useState("");
   const [chartPeriod, setChartPeriod] = useState<"week" | "month">("week");
@@ -83,6 +84,24 @@ export function Dashboard() {
     };
 
     loadOrdersForChart();
+  }, []);
+
+  useEffect(() => {
+    const loadProductsCount = async () => {
+      try {
+        const response = await fetch("/api/products?status=todos");
+        if (!response.ok) {
+          throw new Error("No se pudo cargar el total de productos");
+        }
+
+        const payload = await response.json();
+        setInventoryProductCount(Array.isArray(payload) ? payload.length : 0);
+      } catch {
+        setInventoryProductCount(0);
+      }
+    };
+
+    loadProductsCount();
   }, []);
 
   const allowedJefePaths = ["/", "/orders", "/reporteria", "/products", "/clients", "/users", "/settings"];
@@ -213,13 +232,13 @@ export function Dashboard() {
       },
       {
         title: "Productos",
-        value: String(uniqueProducts.size),
+        value: String(inventoryProductCount),
         icon: Package,
         color: "text-orange-600",
         bgColor: "bg-orange-50",
       },
     ];
-  }, [currentMonthOrders, isAdmin, isJefe, isVendedor]);
+  }, [currentMonthOrders, inventoryProductCount, isAdmin, isJefe, isVendedor]);
 
   const quickActions = [
     {

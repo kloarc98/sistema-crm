@@ -9,6 +9,7 @@ import { useAlert } from "../context/AlertContext";
 import { useProducts } from "../context/ProductContext";
 import { useAuth } from "../context/AuthContext";
 import { formatCurrency, formatNumber } from "../utils/numberFormat";
+import { fetchGlobalPaymentReminderDays } from "../utils/paymentReminderSettings";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,15 @@ interface ClientOption {
   id: string;
   nombreEmpresa: string;
   direccion?: string;
+  tipoCliente?: string;
+}
+
+interface ClientDebtStatus {
+  hasOverduePending: boolean;
+  overdueCount: number;
+  overdueTotal: number;
+  maxDaysPending: number;
+  reminderDays: number;
 }
 
 export function Income() {
@@ -90,6 +100,8 @@ export function Income() {
   const [isCustomerDialogSearchOpen, setIsCustomerDialogSearchOpen] = useState(false);
   const [customerAddress, setCustomerAddress] = useState("");
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
+  const [selectedClientType, setSelectedClientType] = useState<"estandar" | "premium">("estandar");
+  const [clientDebtStatus, setClientDebtStatus] = useState<ClientDebtStatus | null>(null);
 
   // Sales details dialog
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
@@ -261,8 +273,94 @@ export function Income() {
     setCustomerName(client.nombreEmpresa);
     setCustomerSearchText(client.nombreEmpresa);
     setCustomerAddress(client.direccion || "");
+    setSelectedClientType(client.tipoCliente === "premium" ? "premium" : "estandar");
     setIsCustomerSearchOpen(false);
     setIsCustomerDialogSearchOpen(false);
+  };
+
+  const getEffectiveUnitPrice = (product: any) => {
+    const premiumPrice = Number(product?.precioPremium ?? 0);
+    if (selectedClientType === "premium" && premiumPrice > 0) {
+      return premiumPrice;
+    }
+
+    return Number(product?.price ?? 0);
+  };
+
+  const loadSelectedClientDebtStatus = async (clientId: string) => {
+    if (!clientId) {
+      setClientDebtStatus(null);
+      return;
+    }
+
+    try {
+      const [reminderDays, ordersResponse] = await Promise.all([
+        fetchGlobalPaymentReminderDays(),
+        fetch("/api/orders"),
+      ]);
+
+      if (!ordersResponse.ok) {
+        throw new Error("No se pudo cargar el estado de cuentas del cliente");
+      }
+
+      const payload = await ordersResponse.json();
+      const now = Date.now();
+      const numericClientId = Number(clientId);
+
+      const rows = Array.isArray(payload) ? payload : [];
+      const overdueRows = rows.filter((row: any) => {
+        const rowClientId = Number(row?.cli_id || 0);
+        if (rowClientId !== numericClientId) return false;
+
+        const total = Number(row?.total) || 0;
+        const paid = row?.ped_saldo_pag === null || typeof row?.ped_saldo_pag === "undefined"
+          ? 0
+          : Number(row?.ped_saldo_pag) || 0;
+        const pendingRaw = row?.ped_saldo_pen === null || typeof row?.ped_saldo_pen === "undefined"
+          ? Math.max(0, total - paid)
+          : Number(row?.ped_saldo_pen) || 0;
+        const pending = Math.max(0, pendingRaw);
+
+        if (pending <= 0.00001) return false;
+
+        const status = String(row?.status || "pendiente").toLowerCase();
+        if (status.includes("cancel")) return false;
+
+        const createdAt = row?.created_at ? new Date(String(row.created_at)) : null;
+        const createdMs = createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.getTime() : null;
+        const daysPending = createdMs === null ? 0 : Math.floor((now - createdMs) / (1000 * 60 * 60 * 24));
+
+        return daysPending >= reminderDays;
+      });
+
+      const overdueTotal = overdueRows.reduce((sum: number, row: any) => {
+        const total = Number(row?.total) || 0;
+        const paid = row?.ped_saldo_pag === null || typeof row?.ped_saldo_pag === "undefined"
+          ? 0
+          : Number(row?.ped_saldo_pag) || 0;
+        const pendingRaw = row?.ped_saldo_pen === null || typeof row?.ped_saldo_pen === "undefined"
+          ? Math.max(0, total - paid)
+          : Number(row?.ped_saldo_pen) || 0;
+        return sum + Math.max(0, pendingRaw);
+      }, 0);
+
+      const maxDaysPending = overdueRows.reduce((max: number, row: any) => {
+        const createdAt = row?.created_at ? new Date(String(row.created_at)) : null;
+        const createdMs = createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.getTime() : null;
+        const daysPending = createdMs === null ? 0 : Math.floor((now - createdMs) / (1000 * 60 * 60 * 24));
+        return Math.max(max, daysPending);
+      }, 0);
+
+      setClientDebtStatus({
+        hasOverduePending: overdueRows.length > 0,
+        overdueCount: overdueRows.length,
+        overdueTotal,
+        maxDaysPending,
+        reminderDays,
+      });
+    } catch {
+      setClientDebtStatus(null);
+    }
   };
 
   const handleConfirmAddProduct = () => {
@@ -277,6 +375,8 @@ export function Income() {
     }
 
     const existingItem = cart.find((item) => item.productId === product.id);
+    const effectivePrice = getEffectiveUnitPrice(product);
+
     if (existingItem) {
       if (existingItem.quantity + qty > availableStock) {
         addAlert(`No puedes agregar más de ${availableStock} unidades de ${product.name} (ya tienes ${existingItem.quantity} en el carrito)`, "warning");
@@ -284,7 +384,7 @@ export function Income() {
       }
       setCart(cart.map((item) =>
         item.productId === product.id
-          ? { ...item, quantity: item.quantity + qty }
+          ? { ...item, quantity: item.quantity + qty, price: effectivePrice }
           : item
       ));
     } else {
@@ -296,7 +396,7 @@ export function Income() {
         productId: product.id,
         name: product.name,
         barcode: product.barcode || "",
-        price: product.price,
+        price: effectivePrice,
         quantity: qty,
       }]);
     }
@@ -602,6 +702,7 @@ export function Income() {
       setCustomerName("");
       setCustomerSearchText("");
       setCustomerAddress("");
+      setSelectedClientType("estandar");
       setIsCustomerDialogOpen(false);
       setCurrentTab("history");
     } catch (error) {
@@ -820,6 +921,8 @@ export function Income() {
               .map((item) => ({
                 id: String(item?.id || ""),
                 nombreEmpresa: String(item?.nombreEmpresa || ""),
+                direccion: String(item?.direccion || ""),
+                tipoCliente: String(item?.tipoCliente || "estandar"),
               }))
               .filter((item) => item.id && item.nombreEmpresa)
           : [];
@@ -832,6 +935,10 @@ export function Income() {
 
     fetchClients();
   }, [user?.id, user?.role, user?.username]);
+
+  useEffect(() => {
+    void loadSelectedClientDebtStatus(customerId);
+  }, [customerId]);
 
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -934,9 +1041,11 @@ export function Income() {
                           if (exactMatch) {
                             setCustomerId(exactMatch.id);
                             setCustomerAddress(exactMatch.direccion || "");
+                            setSelectedClientType(exactMatch.tipoCliente === "premium" ? "premium" : "estandar");
                           } else {
                             setCustomerId("");
                             setCustomerAddress("");
+                            setSelectedClientType("estandar");
                           }
                         }}
                         className={`pl-10 ${darkMode ? 'bg-gray-600 border-gray-500 text-white placeholder-gray-400' : ''}`}
@@ -961,6 +1070,9 @@ export function Income() {
                               }`}
                             >
                               <p className="text-sm font-medium">{client.nombreEmpresa}</p>
+                              {client.tipoCliente === "premium" && (
+                                <p className="text-xs text-purple-600 font-semibold">★ Premium</p>
+                              )}
                             </button>
                           ))}
                           {filterClientsByQuery(customerSearchText).length === 0 && (
@@ -972,6 +1084,27 @@ export function Income() {
                       )}
                     </div>
                   </div>
+                  {customerId && (
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold w-fit ${
+                      selectedClientType === "premium"
+                        ? "bg-purple-100 text-purple-700"
+                        : "bg-gray-100 text-gray-600"
+                    }`}>
+                      {selectedClientType === "premium" ? "★ Cliente Premium" : "Cliente Estándar"}
+                    </div>
+                  )}
+
+                  {customerId && clientDebtStatus && (
+                    <div className={`px-3 py-2 rounded-md text-xs font-semibold w-fit ${
+                      clientDebtStatus.hasOverduePending
+                        ? "bg-red-100 text-red-700"
+                        : "bg-emerald-100 text-emerald-700"
+                    }`}>
+                      {clientDebtStatus.hasOverduePending
+                        ? `⚠ ${clientDebtStatus.overdueCount} cuenta(s) vencida(s) • ${formatCurrency(clientDebtStatus.overdueTotal)} • máx ${formatNumber(clientDebtStatus.maxDaysPending)} día(s)`
+                        : `Al día (sin cuentas vencidas >= ${formatNumber(clientDebtStatus.reminderDays)} días)`}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1027,7 +1160,10 @@ export function Income() {
                             )}
                           </div>
                           <div className="text-right ml-2">
-                            <p className="font-bold text-green-600">{formatCurrency(product.price)}</p>
+                            <p className="font-bold text-green-600">{formatCurrency(getEffectiveUnitPrice(product))}</p>
+                            {selectedClientType === "premium" && Number(product?.precioPremium ?? 0) > 0 && (
+                              <p className="text-[11px] text-purple-600 font-semibold">Precio Premium</p>
+                            )}
                             <p className={`text-xs opacity-75 mt-1 ${
                               product.stock > 0 ? 'text-blue-600' : 'text-red-600'
                             }`}>
@@ -1765,7 +1901,7 @@ export function Income() {
                 <div className="flex items-center justify-between mt-2 pt-2 border-t"
                   style={{ borderColor: darkMode ? '#4b5563' : '#bfdbfe' }}>
                   <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Precio unitario</span>
-                  <span className="text-xl font-bold text-green-600">{formatCurrency(selectedProductToAdd.price)}</span>
+                  <span className="text-xl font-bold text-green-600">{formatCurrency(getEffectiveUnitPrice(selectedProductToAdd))}</span>
                 </div>
                 <div className="flex items-center justify-between mt-1">
                   <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Stock disponible</span>
@@ -1815,7 +1951,7 @@ export function Income() {
                     +
                   </button>
                   <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                    = {formatCurrency(selectedProductToAdd.price * addProductQuantity)}
+                    = {formatCurrency(getEffectiveUnitPrice(selectedProductToAdd) * addProductQuantity)}
                   </span>
                 </div>
               </div>

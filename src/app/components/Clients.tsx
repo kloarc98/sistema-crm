@@ -35,6 +35,7 @@ interface ClientRecord {
   telefonoOpcional: string;
   correo: string;
   nit: string;
+  tipoCliente?: string;
   estado?: string;
   fecha_creacion?: string | null;
 }
@@ -54,6 +55,7 @@ const emptyForm = {
   telefonoOpcional: "",
   correo: "",
   nit: "",
+  tipoCliente: "estandar",
 };
 
 export function Clients() {
@@ -266,6 +268,7 @@ export function Clients() {
       telefonoOpcional: client.telefonoOpcional,
       correo: client.correo,
       nit: client.nit,
+      tipoCliente: client.tipoCliente || "estandar",
     });
 
     if (depId) {
@@ -383,6 +386,21 @@ export function Clients() {
                   onChange={(e) => setForm((prev) => ({ ...prev, nit: e.target.value.toUpperCase() }))}
                   className={darkMode ? "bg-gray-700 border-gray-600 text-white" : ""}
                 />
+              </div>
+              <div>
+                <Label className={darkMode ? "text-gray-200" : ""}>Tipo de Cliente</Label>
+                <Select
+                  value={form.tipoCliente || "estandar"}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, tipoCliente: value }))}
+                >
+                  <SelectTrigger className={darkMode ? "bg-gray-700 border-gray-600 text-white" : ""}>
+                    <SelectValue placeholder="Tipo de cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="estandar">Estándar</SelectItem>
+                    <SelectItem value="premium">Premium</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label className={darkMode ? "text-gray-200" : ""}>Nombre Empresa</Label>
@@ -547,7 +565,7 @@ export function Clients() {
                             Correo: {client.correo || "N/A"}
                           </p>
                           <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-600"}`}>
-                            Tel: {client.telefono || "N/A"} • Estado: {estado}
+                            Tel: {client.telefono || "N/A"} • Estado: {estado} • Tipo: <span className={client.tipoCliente === "premium" ? "text-purple-600 font-semibold" : ""}>{client.tipoCliente === "premium" ? "Premium" : "Estándar"}</span>
                           </p>
                           <p className={`text-sm break-words ${darkMode ? "text-gray-400" : "text-gray-600"}`}>
                             Ubicacion: {client.departamentoNombre || "N/A"} - {client.municipioNombre || "N/A"}
